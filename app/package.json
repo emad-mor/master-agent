@@ -1,0 +1,42 @@
+{
+  "name": "master-agent",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Aria — a local, voice-driven Claude Code agent with layered per-project memory and access to every folder in ../workspace.",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:web": "next dev --turbopack -p 3939",
+    "build": "next build --turbopack",
+    "start": "next start -p 3939",
+    "typecheck": "tsc --noEmit",
+    "lint": "next lint",
+    "postinstall": "node scripts/postinstall.mjs",
+    "doctor": "node scripts/doctor.mjs",
+    "setup": "node scripts/postinstall.mjs",
+    "setup:whisper": "node scripts/setup-whisper.mjs",
+    "setup:tts": "node scripts/setup-tts.mjs",
+    "unquarantine": "node scripts/unquarantine.mjs",
+    "tts": "node scripts/start-tts.mjs"
+  },
+  "dependencies": {
+    "lucide-react": "^0.460.0",
+    "next": "^15.0.3",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.0.0-beta.5",
+    "@types/node": "^22.7.4",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "postcss": "^8.5.10",
+    "tailwindcss": "^4.0.0-beta.5",
+    "typescript": "^5.6.2"
+  },
+  "overrides": {
+    "postcss": "^8.5.10"
+  }
+}

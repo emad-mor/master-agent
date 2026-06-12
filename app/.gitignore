@@ -1,0 +1,20 @@
+node_modules
+.next
+out
+dist
+.env
+.env.local
+*.log
+.DS_Store
+next-env.d.ts
+
+# Local layered memory (core facts + per-project turns/summaries/themes).
+# Local-only, never committed.
+data/
+
+# Whisper.cpp binaries + model for local speech-to-text. Large, per-machine.
+whisper/
+
+# Kokoro TTS — Python venv + ~350 MB neural-voice models + setup scripts.
+# Large, per-machine.
+tts/

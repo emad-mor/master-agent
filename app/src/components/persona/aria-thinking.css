@@ -1,0 +1,97 @@
+/* Aria thinking animation — ported from agentic-ux-prototype companion-thinking.css */
+
+.thinking-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+
+.thinking {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 240px;
+  padding: 32px 24px;
+  user-select: none;
+}
+
+.thinking-stage {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  perspective: 600px;
+  animation: thinkEnter 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes thinkEnter { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+/* multi-colour glow */
+.thinking-glow { position: absolute; inset: 0; pointer-events: none; }
+.thinking-glow__b { position: absolute; border-radius: 50%; will-change: transform, opacity; }
+.thinking-glow__b--violet  { width: 80px; height: 80px; top: 0; left: 0; filter: blur(18px); background: radial-gradient(circle, rgba(124,40,255,0.7) 0%, rgba(90,20,220,0.15) 45%, transparent 70%); animation: gDriftA 5s ease-in-out infinite; }
+.thinking-glow__b--indigo  { width: 85px; height: 85px; top: 5px; right: 0; filter: blur(20px); background: radial-gradient(circle, rgba(90,20,200,0.65) 0%, rgba(70,10,180,0.12) 45%, transparent 70%); animation: gDriftB 7s ease-in-out infinite; }
+.thinking-glow__b--magenta { width: 70px; height: 70px; bottom: 0; right: 5px; filter: blur(16px); background: radial-gradient(circle, rgba(200,40,140,0.55) 0%, rgba(180,30,120,0.1) 45%, transparent 70%); animation: gDriftC 6s ease-in-out infinite; }
+.thinking-glow__b--rose    { width: 65px; height: 65px; bottom: 5px; left: 5px; filter: blur(14px); background: radial-gradient(circle, rgba(232,42,112,0.5) 0%, rgba(200,30,90,0.08) 45%, transparent 70%); animation: gDriftD 8s ease-in-out infinite; }
+.thinking-glow__b--core    { width: 55px; height: 55px; top: 50%; left: 50%; transform: translate(-50%,-50%); filter: blur(14px); background: radial-gradient(circle, rgba(140,60,255,0.85) 0%, rgba(124,44,255,0.3) 40%, transparent 65%); animation: gPulse 3s ease-in-out infinite; }
+
+@keyframes gDriftA { 0%{transform:translate(0,0) scale(1);opacity:.8;} 33%{transform:translate(8px,6px) scale(1.1);opacity:.6;} 66%{transform:translate(-6px,3px) scale(.92);opacity:.9;} 100%{transform:translate(0,0) scale(1);opacity:.8;} }
+@keyframes gDriftB { 0%{transform:translate(0,0) scale(1);opacity:.7;} 50%{transform:translate(-10px,8px) scale(1.12);opacity:.5;} 100%{transform:translate(0,0) scale(1);opacity:.7;} }
+@keyframes gDriftC { 0%{transform:translate(0,0) scale(1);opacity:.6;} 40%{transform:translate(6px,-8px) scale(1.08);opacity:.8;} 70%{transform:translate(-5px,5px) scale(.95);opacity:.5;} 100%{transform:translate(0,0) scale(1);opacity:.6;} }
+@keyframes gDriftD { 0%{transform:translate(0,0) scale(1);opacity:.55;} 50%{transform:translate(7px,-6px) scale(1.06);opacity:.7;} 100%{transform:translate(0,0) scale(1);opacity:.55;} }
+@keyframes gPulse  { 0%{transform:translate(-50%,-50%) scale(1);opacity:.8;} 50%{transform:translate(-50%,-50%) scale(1.4);opacity:.5;} 100%{transform:translate(-50%,-50%) scale(1);opacity:.8;} }
+
+/* center star — breathing + slow spin */
+.thinking-center { position: relative; z-index: 3; display: flex; animation: thinkBreathe 1.6s ease-in-out infinite; }
+.thinking-center-star { display: block; filter: drop-shadow(0 0 16px rgba(156,137,255,0.8)) drop-shadow(0 0 32px rgba(124,44,255,0.45)); animation: thinkSpin 3s linear infinite; }
+@keyframes thinkSpin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+@keyframes thinkBreathe { 0%{transform:scale(.75);} 50%{transform:scale(1.25);} 100%{transform:scale(.75);} }
+
+/* orbits */
+.thinking-orbits { position: absolute; top: 50%; left: 50%; width: 0; height: 0; z-index: 2; }
+.thinking-ring {
+  position: absolute; top: 0; left: 0; width: 0; height: 0;
+  transform-style: preserve-3d;
+  transform: rotateX(var(--tilt-x)) rotateZ(var(--tilt-z));
+  animation: thinkOrbit var(--orbit-speed) linear infinite;
+  animation-delay: var(--orbit-delay);
+}
+.thinking-sat {
+  position: absolute; top: 0; left: 0;
+  transform: translateX(var(--orbit-radius)) translateY(-50%);
+  animation: thinkCounter var(--orbit-speed) linear infinite;
+  animation-delay: var(--orbit-delay);
+}
+.thinking-star { display: block; filter: drop-shadow(0 0 4px rgba(156,137,255,0.5)); }
+.thinking-star--flicker {
+  animation:
+    thinkTwinkle 2.5s ease-in-out infinite,
+    thinkFlicker 1.2s ease-in-out infinite,
+    thinkResize var(--resize-speed, 2s) ease-in-out infinite;
+  animation-delay: 0s, var(--flicker-delay, 0s), var(--flicker-delay, 0s);
+}
+@keyframes thinkOrbit { from { transform: rotateX(var(--tilt-x)) rotateZ(var(--tilt-z)) rotate(0); } to { transform: rotateX(var(--tilt-x)) rotateZ(var(--tilt-z)) rotate(360deg); } }
+@keyframes thinkCounter { from { transform: translateX(var(--orbit-radius)) translateY(-50%) rotate(0); } to { transform: translateX(var(--orbit-radius)) translateY(-50%) rotate(-360deg); } }
+@keyframes thinkTwinkle { 0%,100%{opacity:1;transform:scale(1);} 50%{opacity:.4;transform:scale(.7);} }
+@keyframes thinkFlicker {
+  0%   { filter: brightness(2) drop-shadow(0 0 12px rgba(255,255,255,1)) drop-shadow(0 0 20px rgba(255,255,255,0.7)); }
+  25%  { filter: brightness(0.8) drop-shadow(0 0 14px rgba(124,40,255,1)) drop-shadow(0 0 28px rgba(124,44,255,0.9)); }
+  50%  { filter: brightness(2.2) drop-shadow(0 0 16px rgba(255,255,255,1)) drop-shadow(0 0 24px rgba(220,210,255,0.8)); }
+  75%  { filter: brightness(0.7) drop-shadow(0 0 18px rgba(90,20,220,1)) drop-shadow(0 0 32px rgba(124,44,255,1)); }
+  100% { filter: brightness(2) drop-shadow(0 0 12px rgba(255,255,255,1)) drop-shadow(0 0 20px rgba(255,255,255,0.7)); }
+}
+@keyframes thinkResize { 0%,100%{transform:scale(var(--resize-from,1));} 50%{transform:scale(var(--resize-to,1.4));} }
+
+/* status text */
+.thinking-status {
+  margin-top: 22px;
+  font-size: 13.5px;
+  letter-spacing: 0.3px;
+  text-align: center;
+  color: var(--aria-fg-dim, rgba(255,255,255,0.66));
+  transition: opacity 0.33s ease, transform 0.33s ease;
+}
+.thinking-status--fading { opacity: 0; transform: translateY(4px); }
+
+@media (prefers-reduced-motion: reduce) {
+  .thinking-stage, .thinking-center, .thinking-center-star, .thinking-glow__b,
+  .thinking-ring, .thinking-sat, .thinking-star--flicker { animation: none !important; }
+}

@@ -1,0 +1,67 @@
+/* Styled markdown for assistant replies. Inherits text colour from the parent
+   (so it works in the homepage's light/dark glass). Comfortable reading rhythm. */
+
+.md { font-size: 14.5px; line-height: 1.5; color: inherit; max-width: 70ch; }
+.md > *:first-child { margin-top: 0; }
+.md > *:last-child { margin-bottom: 0; }
+
+.md p { margin: 0 0 8px; }
+.md h1, .md h2, .md h3, .md h4 { font-weight: 650; line-height: 1.25; margin: 14px 0 5px; letter-spacing: -0.01em; }
+.md h1 { font-size: 1.35em; }
+.md h2 { font-size: 1.18em; }
+.md h3 { font-size: 1.06em; }
+.md h4 { font-size: 1em; opacity: 0.92; }
+
+.md ul, .md ol { margin: 0 0 8px; padding-left: 1.35em; }
+.md li { margin: 1.5px 0; }
+.md li > ul, .md li > ol { margin: 2px 0; }
+.md li::marker { color: #a06bff; }
+
+.md blockquote {
+  margin: 0 0 8px; padding: 2px 12px;
+  border-left: 3px solid rgba(160,110,255,0.5);
+  color: inherit; opacity: 0.82;
+}
+
+.md strong { font-weight: 680; }
+.md em { font-style: italic; }
+.md del { opacity: 0.6; }
+.md hr { border: none; border-top: 1px solid currentColor; opacity: 0.14; margin: 16px 0; }
+
+/* inline code chip */
+.md-code-inline {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.88em;
+  padding: 1.5px 6px; border-radius: 6px;
+  background: rgba(140,90,230,0.16);
+  border: 1px solid rgba(160,110,255,0.22);
+  color: inherit; white-space: nowrap;
+}
+
+/* fenced code block */
+.md-pre {
+  margin: 0 0 8px; padding: 10px 12px; overflow-x: auto;
+  border-radius: 12px;
+  background: rgba(10,8,16,0.55);
+  border: 1px solid rgba(255,255,255,0.1);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+}
+:root:not(.dark) .md-pre { background: rgba(40,30,55,0.06); border-color: rgba(60,40,90,0.14); }
+.md-pre .md-code { font-family: var(--font-mono, ui-monospace, monospace); font-size: 12.5px; line-height: 1.6; background: none; border: none; padding: 0; white-space: pre; color: inherit; }
+
+/* links */
+.md-link { color: #b98bff; text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
+.md-link:hover { color: #c79bff; }
+
+/* tables (GFM) */
+.md-table-wrap { overflow-x: auto; margin: 0 0 13px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); }
+:root:not(.dark) .md-table-wrap { border-color: rgba(60,40,90,0.14); }
+.md-table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.md-table th, .md-table td { padding: 7px 11px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.08); }
+:root:not(.dark) .md-table th, :root:not(.dark) .md-table td { border-bottom-color: rgba(60,40,90,0.12); }
+.md-table th { font-weight: 600; background: rgba(140,90,230,0.12); }
+.md-table tr:last-child td { border-bottom: none; }
+
+/* GFM task lists */
+.md input[type="checkbox"] { margin-right: 7px; accent-color: #8c3cff; }
+.md li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.2em; }

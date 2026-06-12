@@ -1,0 +1,135 @@
+@import "tailwindcss";
+
+/* ═══════════════════════════════════════════════════════════════
+   Aria — local agent design system
+   Tokens live in @theme (light) + `.dark` overrides. Resets go in
+   @layer base and component classes in @layer components so Tailwind
+   UTILITIES (px-*, border-*, etc.) always win over them.
+   ═══════════════════════════════════════════════════════════════ */
+@theme {
+  /* Light — warm-neutral paper, brand-orange accent */
+  --color-canvas: #FAFAF8;
+  --color-surface: #FFFFFF;
+  --color-surface-2: #F1F0EC;
+  --color-ink: #1B1A17;
+  --color-ink-soft: #433F38;
+  --color-mid: #79736A;
+  --color-faint: #A8A29A;
+  --color-line: rgba(27, 26, 23, 0.09);
+  --color-line-soft: rgba(27, 26, 23, 0.05);
+  --color-line-strong: rgba(27, 26, 23, 0.22);
+  --color-accent: #C24A1C;
+  --color-accent-deep: #9A3412;
+  --color-accent-ink: #FFFFFF;
+  --color-success: #15803D;
+  --color-warning: #B45309;
+  --color-danger: #BE2C2C;
+
+  --shadow-card: 0 1px 2px rgba(24, 22, 19, 0.04), 0 2px 6px rgba(24, 22, 19, 0.05);
+  --shadow-pop: 0 8px 28px rgba(24, 22, 19, 0.12), 0 2px 8px rgba(24, 22, 19, 0.08);
+  --shadow-hover: 0 6px 22px rgba(24, 22, 19, 0.09);
+  --ring: 0 0 0 3px color-mix(in oklab, var(--color-accent) 28%, transparent);
+  --glow: color-mix(in oklab, var(--color-accent) 7%, transparent);
+
+  --radius: 10px;
+  --radius-lg: 14px;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-serif: "Instrument Serif", "Times New Roman", serif;
+  --font-mono: ui-monospace, "SF Mono", "Geist Mono", monospace;
+}
+
+/* Dark — neutral near-black, distinct elevation steps for clear controls */
+.dark {
+  --color-canvas: #0B0B0C;
+  --color-surface: #161618;
+  --color-surface-2: #262528;
+  --color-ink: #F7F6F4;
+  --color-ink-soft: #CFCCC6;
+  --color-mid: #918C84;
+  --color-faint: #5E5A54;
+  --color-line: rgba(255, 255, 255, 0.10);
+  --color-line-soft: rgba(255, 255, 255, 0.055);
+  --color-line-strong: rgba(255, 255, 255, 0.24);
+  --color-accent: #F2702E;
+  --color-accent-deep: #C2410C;
+  --color-accent-ink: #15110D;
+  --color-success: #4FAE7B;
+  --color-warning: #D6A03A;
+  --color-danger: #DE6A6A;
+
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 1px 3px rgba(0, 0, 0, 0.5);
+  --shadow-pop: 0 12px 40px rgba(0, 0, 0, 0.6), 0 2px 10px rgba(0, 0, 0, 0.5);
+  --shadow-hover: 0 8px 30px rgba(0, 0, 0, 0.55);
+  --ring: 0 0 0 3px color-mix(in oklab, var(--color-accent) 35%, transparent);
+  --glow: color-mix(in oklab, var(--color-accent) 10%, transparent);
+}
+
+:root { color-scheme: light; }
+.dark { color-scheme: dark; }
+
+@layer base {
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-weight: 400;
+    font-feature-settings: "cv02", "cv03", "cv04", "ss01";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  html, body, .card, .themed { transition: background-color .22s ease, color .22s ease, border-color .22s ease; }
+
+  ::selection { background: color-mix(in oklab, var(--color-accent) 85%, transparent); color: var(--color-accent-ink); }
+  a { color: inherit; text-decoration: none; }
+  /* Reset native button chrome only — padding stays controllable by utilities */
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
+
+  :focus-visible { outline: none; box-shadow: var(--ring); border-radius: 8px; }
+
+  ::-webkit-scrollbar { width: 11px; height: 11px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--color-line); border-radius: 6px; border: 3px solid transparent; background-clip: content-box; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--color-mid); background-clip: content-box; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  }
+}
+
+@layer components {
+  .app-glow {
+    position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background:
+      radial-gradient(900px 460px at 88% -8%, var(--glow), transparent 62%),
+      radial-gradient(700px 380px at 0% 100%, var(--glow), transparent 60%);
+  }
+
+  .display { font-family: var(--font-serif); font-weight: 400; letter-spacing: -0.015em; line-height: 1.02; }
+  .num { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.02em; color: var(--color-mid); font-variant-numeric: tabular-nums; }
+  .eyebrow { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--color-mid); }
+  .tnum { font-variant-numeric: tabular-nums; }
+
+  .card { background: var(--color-surface); border: 1px solid var(--color-line); border-radius: var(--radius-lg); box-shadow: var(--shadow-card); }
+  .card-hover { transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease, background .16s ease; }
+  .card-hover:hover { border-color: color-mix(in oklab, var(--color-mid) 55%, transparent); box-shadow: var(--shadow-hover); transform: translateY(-1px); }
+
+  /* Form field — visible border in both themes; width controlled by utilities */
+  .field {
+    background: var(--color-surface);
+    border: 1px solid var(--color-line-strong);
+    border-radius: 10px;
+    padding: 0.5rem 0.75rem;
+    font-size: 14px;
+    color: var(--color-ink);
+    transition: border-color .14s ease, box-shadow .14s ease;
+  }
+  .field::placeholder { color: var(--color-mid); }
+  .field:hover { border-color: color-mix(in oklab, var(--color-mid) 55%, var(--color-line-strong)); }
+  .field:focus, .field:focus-visible { outline: none; border-color: color-mix(in oklab, var(--color-accent) 60%, var(--color-line-strong)); box-shadow: var(--ring); }
+}

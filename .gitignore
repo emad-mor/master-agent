@@ -1,0 +1,17 @@
+# The boilerplate tracks the agent app, not your projects or local state.
+
+# Project folders you drop in — they keep their own git.
+workspace/*
+!workspace/README.md
+
+# App build + deps + local runtime state (also ignored by app/.gitignore).
+app/node_modules
+app/.next
+app/data
+
+# Large local voice assets (whisper binaries/model + Kokoro venv/models).
+app/whisper
+app/tts
+
+.DS_Store
+*.log
