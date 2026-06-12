@@ -56,6 +56,7 @@ export type Turn = {
   sessionKey?: string;     // which Aria session/tab this turn belongs to
   sessionLabel?: string;   // display name of that session (denormalized for grouping)
   category?: string;       // topic title for grouping (e.g. "Auth", "UI") — optional
+  kind?: "handoff";        // a system-seeded turn (e.g. a flow carried over from Mission Control), not user-typed
 };
 
 export type Summary = {
@@ -144,7 +145,7 @@ export async function appendTurn(
     id, ts: turn.ts ?? new Date().toISOString(),
     prompt: turn.prompt, reply: turn.reply, toolUses: turn.toolUses, sessionId: turn.sessionId,
     sessionKey: turn.sessionKey, sessionLabel: turn.sessionLabel,
-    category: turn.category,
+    category: turn.category, kind: turn.kind,
   };
   await writeJson(join(turnsDir(key), `${String(id).padStart(6, "0")}.json`), full);
   return full;

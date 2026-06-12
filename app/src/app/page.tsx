@@ -20,6 +20,10 @@ const STORAGE_KEY = "aria.lastDraft";
 const PROJECT_KEY = "aria.activeProject";
 const SPEAK_KEY = "aria.speakReplies";
 const WORKSPACE_KEY = "__workspace__";
+// Auto-speak (when the voice toggle is on) only fires for replies up to this
+// many spoken chars. Longer ones — flow-handoff summaries, big answers — show a
+// manual "Listen" button instead of auto-synthesizing on load.
+const AUTO_SPEAK_MAX = 600;
 const SENTENCE_END = /([.!?]+\s+|\n{2,})/;
 // Strip markdown/emoji so TTS reads prose, not syntax.
 function cleanForSpeech(s: string): string {
@@ -63,6 +67,7 @@ type Turn = {
   activity?: string;
   suggestions?: Suggestion[];
   flow?: LaunchedFlow;        // a multi-agent flow Aria launched from this turn
+  kind?: "handoff";           // system-seeded (flow carried over) — render distinctly, not as a typed message
 };
 
 // Parse [[NEXT label="..." | prompt="..."]] markers out of a reply.
@@ -336,13 +341,14 @@ export default function Home() {
       if (!r.ok) { setTurns([]); return; }
       const data = await r.json() as {
         mode: "full" | "summary" | "empty";
-        turns: { id: number; ts: string; prompt: string; reply: string; toolUses: string[] }[];
+        turns: { id: number; ts: string; prompt: string; reply: string; toolUses: string[]; kind?: "handoff" }[];
         summaries: { id: number; ts: string; text: string }[];
       };
       if (data.mode === "full" && data.turns.length) {
         const loaded: Turn[] = data.turns.map((t) => ({
           id: t.id, prompt: t.prompt, reply: t.reply, toolUses: t.toolUses ?? [],
           status: "done" as const, startedAt: new Date(t.ts).getTime() || Date.now(),
+          kind: t.kind,
           suggestions: parseSuggestions(t.reply),
         }));
         // Keep new live turns from colliding with restored ids.
@@ -852,7 +858,9 @@ export default function Home() {
             <div ref={transcriptRef} className="home-transcript">
               {turns.map((t) => (
                 <div key={t.id} className="aria-turn">
-                  <div className="aria-bubble">{t.prompt}</div>
+                  {t.kind === "handoff"
+                    ? <div className="aria-handoff"><GitBranch size={13} /> Carried over from Mission Control</div>
+                    : <div className="aria-bubble">{t.prompt}</div>}
                   {t.toolUses.length > 0 && (
                     <div className="aria-tools">
                       {t.toolUses.map((name, i) => (
@@ -896,7 +904,10 @@ export default function Home() {
                         </div>
                       )}
                       {t.reply && t.status !== "streaming" && (
-                        <ReplyVoice text={t.reply} cleanForSpeech={cleanForSpeech} autoLoad={speakReplies} />
+                        // Auto-speak only short replies — synthesizing a long one
+                        // (e.g. a flow-handoff summary) is slow and churns the
+                        // sidecar; longer replies keep a manual "Listen" button.
+                        <ReplyVoice text={t.reply} cleanForSpeech={cleanForSpeech} autoLoad={speakReplies && cleanForSpeech(stripSuggestions(t.reply)).length <= AUTO_SPEAK_MAX} />
                       )}
                     </div>
                   )}
