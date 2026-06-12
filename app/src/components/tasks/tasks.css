@@ -165,8 +165,22 @@
 }
 .tk-input:focus { border-color: rgba(160,110,255,0.6); box-shadow: 0 0 0 3px rgba(124,44,255,0.18); }
 .tk-input::placeholder { color: var(--aria-fg-faint); }
-.tk-label { font-size: 11.5px; font-weight: 600; color: var(--aria-fg-dim); margin-bottom: -4px; }
+.tk-label { display: flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; color: var(--aria-fg-dim); margin-bottom: -4px; }
+.tk-label svg { color: #c79bff; opacity: 0.85; }
+.tk-label__opt { font-weight: 500; font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--aria-fg-faint); }
 .tk-hint { font-size: 12px; color: var(--aria-fg-dim); line-height: 1.55; }
+
+/* New-task drawer: two-column agent/model config + footer with run button */
+.tk-taskcfg {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  padding: 13px; border-radius: 14px;
+  border: 1px solid var(--aria-stroke);
+  background: linear-gradient(160deg, color-mix(in oklab, #8c3cff 7%, transparent), var(--aria-fill));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+}
+.tk-taskcfg__field { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+@media (max-width: 520px) { .tk-taskcfg { grid-template-columns: 1fr; } }
+.tk-taskfoot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 2px; }
 .tk-check { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--aria-fg-dim); }
 .tk-check input { width: 15px; height: 15px; accent-color: #8c3cff; }
 

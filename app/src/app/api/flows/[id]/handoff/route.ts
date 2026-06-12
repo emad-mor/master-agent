@@ -21,6 +21,18 @@ export const dynamic = "force-dynamic";
 
 const stripMarkers = (s: string) => s.replace(/\[\[\s*ASK\b[^\]]*\]\]/gi, "").trim();
 
+// Trim to a budget WITHOUT cutting mid-sentence — a hard mid-word slice makes the
+// distiller think the content was accidentally truncated and refuse. Cut at the
+// last sentence/paragraph boundary within the budget and mark it explicitly.
+function trimClean(s: string, max: number): string {
+  const t = s.trim();
+  if (t.length <= max) return t;
+  const window = t.slice(0, max);
+  const cut = Math.max(window.lastIndexOf("\n\n"), window.lastIndexOf(". "), window.lastIndexOf("! "), window.lastIndexOf("? "));
+  const body = (cut > max * 0.5 ? window.slice(0, cut + 1) : window).trim();
+  return `${body}\n[… trimmed for the summary; the full text is in the saved file …]`;
+}
+
 export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const res = getFlowResults(id);
@@ -65,25 +77,24 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
   // the carried-over turn arrives with actionable chips grounded in the research
   // (the seeded turn never runs the persona route that normally adds them).
   const distillPrompt = [
-    "A multi-agent research flow just completed and is being carried into a chat. Produce TWO things, in order:",
+    "You are writing a handoff card that summarizes a COMPLETED multi-agent research flow for the start of a chat. The research below is COMPLETE and FINAL — summarize what is there.",
+    "HARD RULES: Never address the reader. Never say the input is truncated, incomplete, or cut off. Never ask for more, never ask a question, never refuse. If a passage ends with a '[… trimmed …]' note, that is intentional — just summarize what precedes it. Output ONLY the two parts below, nothing else.",
     "",
     "PART 1 — a summary with these exact Markdown headings:",
     "**The ask:** (1 sentence)",
     "**What the research did:** (1-2 sentences on the chain of steps)",
-    "**Key conclusion:** (2-4 sentences — the actionable bottom line)",
+    "**Key conclusion:** (2-4 sentences — the actionable bottom line, drawn from the FINAL CONCLUSION section)",
     "",
     "PART 2 — after a line containing only '===NEXT===', output 2-4 concrete next actions the user could take based on THIS research, each on its own line in EXACTLY this format (nothing else):",
     '[[NEXT label="<≤5 words>" | prompt="<the full instruction to run if clicked, self-contained>"]]',
     "Make the actions specific to the findings (e.g. implement a recommendation, dig into a flagged risk, validate a claim, draft the next artifact). Not generic.",
     "",
-    "Be specific and faithful to the content. No preamble before PART 1.",
-    "",
-    flow.rootInput ? `ASK: ${flow.rootInput.slice(0, 800)}` : "",
+    flow.rootInput ? `ASK: ${trimClean(flow.rootInput, 800)}` : "",
     "",
     "STEPS:",
-    ...ordered.map((t) => `- Step ${t.stepKey} (${t.agentName ?? "Aria"}): ${stripMarkers(t.summary || t.reply).slice(0, 900)}`),
+    ...ordered.map((t) => `- Step ${t.stepKey} (${t.agentName ?? "Aria"}): ${trimClean(stripMarkers(t.summary || t.reply), 1400)}`),
     "",
-    `FINAL CONCLUSION:\n${stripMarkers(conclusion.reply).slice(0, 4000)}`,
+    `FINAL CONCLUSION:\n${trimClean(stripMarkers(conclusion.reply), 6000)}`,
   ].filter(Boolean).join("\n");
 
   const distilled = (await runHaiku(distillPrompt, 30_000)).trim();
@@ -101,9 +112,24 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
       summary = distilled.replace(markerRe, "").trim();
     }
   } else {
-    // Fallback if the distiller is unavailable — first ~1.2k of the conclusion.
-    summary = `**Key conclusion:**\n\n${stripMarkers(conclusion.reply).slice(0, 1200)}`;
+    summary = "";
     nextMarkers = "";
+  }
+
+  // Guard: if the distiller refused or addressed the user instead of summarizing
+  // (it occasionally misreads trimmed input as "truncated"), discard it and use a
+  // deterministic summary built straight from the research. The user must never
+  // see Aria asking THEM for the "complete research".
+  const looksLikeRefusal = !summary
+    || /\b(truncat|cut off|incomplete|could you provide|i need the|please (provide|share)|appear to be|seems to be missing|don't have (enough|the))/i.test(summary)
+    || !/\*\*Key conclusion:\*\*/i.test(summary);
+  if (looksLikeRefusal) {
+    summary = [
+      flow.rootInput ? `**The ask:** ${trimClean(flow.rootInput, 240)}` : "",
+      `**What the research did:** A ${ordered.length}-step flow${ordered.length > 1 ? " — each step feeding the next" : ""}: ${ordered.map((t) => t.title ?? `Step ${t.stepKey}`).join(" → ")}.`,
+      `**Key conclusion:** ${trimClean(stripMarkers(conclusion.reply), 900)}`,
+    ].filter(Boolean).join("\n\n");
+    nextMarkers = "";   // force the deterministic fallback chips below
   }
   if (!nextMarkers) {
     // Always give the user a way forward, even if distillation failed.

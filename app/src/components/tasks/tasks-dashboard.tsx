@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   Sparkles, Plus, Users, GitBranch, Square, Trash2, Loader2, RefreshCw, X, ArrowLeft,
   Wrench, CircleDot, CheckCircle2, XCircle, Clock, Wand2, Pencil, Check, KeyRound,
-  ArrowRight, HelpCircle, Info, Paperclip, FileText,
+  ArrowRight, HelpCircle, Info, Paperclip, FileText, Cpu, Bot,
 } from "lucide-react";
 import { cx } from "@/lib/format";
 import { useTaskStream, type TaskView } from "./use-task-stream";
@@ -176,8 +176,8 @@ export function TasksDashboard() {
           </select>
         </div>
         <button className="tk-btn" onClick={() => setPanel("agents")}><Users size={15} /> Agents <span className="tk-pill">{agents.length}</span></button>
-        <button className="tk-btn" onClick={() => setPanel("flow")}><GitBranch size={15} /> New flow</button>
-        <button className="tk-btn tk-btn--primary" onClick={() => setPanel("newtask")}><Plus size={15} /> New task</button>
+        <button className="tk-btn" onClick={() => setPanel("newtask")}><Plus size={15} /> New task</button>
+        <button className="tk-btn tk-btn--primary" onClick={() => setPanel("flow")}><GitBranch size={15} /> New flow</button>
         <button className="aria-iconbtn" onClick={() => void loadTasks()} title="Refresh"><RefreshCw size={15} /></button>
       </header>
 
@@ -194,8 +194,8 @@ export function TasksDashboard() {
               Everything runs in parallel and streams live here.
             </div>
             <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
-              <button className="tk-btn tk-btn--primary" onClick={() => setPanel("newtask")}><Plus size={15} /> New task</button>
-              <button className="tk-btn" onClick={() => setPanel("flow")}><GitBranch size={15} /> New flow</button>
+              <button className="tk-btn tk-btn--primary" onClick={() => setPanel("flow")}><GitBranch size={15} /> New flow</button>
+              <button className="tk-btn" onClick={() => setPanel("newtask")}><Plus size={15} /> New task</button>
             </div>
           </div>
         ) : (
@@ -689,25 +689,34 @@ function NewTaskPanel({ agents, project, projectName, onClose, onStarted }: { ag
   };
   return (
     <SlideOver title="New task" subtitle={`Runs in ${projectName} · streams live on the board`} onClose={onClose} icon={<Plus size={16} />}>
-      <label className="tk-label">Agent (optional)</label>
-      <div className="aria-proj">
-        <select value={agentId} onChange={(e) => setAgentId(e.target.value)}>
-          <option value="">No agent — plain Aria</option>
-          {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-        </select>
+      <div className="tk-taskcfg">
+        <div className="tk-taskcfg__field">
+          <label className="tk-label"><Bot size={12} /> Agent <span className="tk-label__opt">optional</span></label>
+          <div className="aria-proj">
+            <select value={agentId} onChange={(e) => setAgentId(e.target.value)}>
+              <option value="">No agent — plain Aria</option>
+              {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="tk-taskcfg__field">
+          <label className="tk-label"><Cpu size={12} /> Model</label>
+          <div className="aria-proj">
+            <select value={model} onChange={(e) => setModel(e.target.value)}>
+              <option value="">{agentModel ? `Agent default (${modelLabel(agentModel)})` : "Default (let Claude choose)"}</option>
+              {MODELS.map((m) => <option key={m.id} value={m.id}>{m.label} — {m.blurb}</option>)}
+            </select>
+          </div>
+        </div>
       </div>
-      <label className="tk-label">Model</label>
-      <div className="aria-proj">
-        <select value={model} onChange={(e) => setModel(e.target.value)}>
-          <option value="">{agentModel ? `Agent default (${modelLabel(agentModel)})` : "Default (let Claude choose)"}</option>
-          {MODELS.map((m) => <option key={m.id} value={m.id}>{m.label} — {m.blurb}</option>)}
-        </select>
+      <label className="tk-label" style={{ marginTop: 2 }}><Wand2 size={12} /> Task</label>
+      <textarea className="aria-mem__textarea" style={{ flex: 1, minHeight: 180, resize: "none" }} placeholder="What should this task do? Be specific — the agent runs it autonomously and streams its work live on the board." value={prompt} onChange={(e) => setPrompt(e.target.value)} autoFocus />
+      <div className="tk-taskfoot">
+        <span className="tk-hint" style={{ margin: 0 }}><CircleDot size={11} style={{ verticalAlign: -1 }} /> Runs in <b>{projectName}</b></span>
+        <button className="tk-btn tk-btn--primary" onClick={start} disabled={!prompt.trim() || busy}>
+          {busy ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Start task
+        </button>
       </div>
-      <label className="tk-label">Task</label>
-      <textarea className="aria-mem__textarea" style={{ minHeight: 140 }} placeholder="What should this task do?" value={prompt} onChange={(e) => setPrompt(e.target.value)} autoFocus />
-      <button className="tk-btn tk-btn--primary" style={{ alignSelf: "flex-end" }} onClick={start} disabled={!prompt.trim() || busy}>
-        {busy ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Start task
-      </button>
     </SlideOver>
   );
 }
@@ -781,9 +790,9 @@ function FlowPanel({ agents, templates, project, onClose, onStarted }: { agents:
         <span className="tk-hint" style={{ margin: 0 }}>{model ? "This model overrides every step's agent model." : "Each step runs on its agent's chosen model (or the default)."}</span>
       </div>
       <div className="tk-tabs">
+        <button className={cx("tk-tab", mode === "nl" && "tk-tab--on")} onClick={() => setMode("nl")}><Wand2 size={13} /> Describe it</button>
         <button className={cx("tk-tab", mode === "templates" && "tk-tab--on")} onClick={() => setMode("templates")}><Sparkles size={13} /> Templates</button>
         <button className={cx("tk-tab", mode === "steps" && "tk-tab--on")} onClick={() => setMode("steps")}><GitBranch size={13} /> Build steps</button>
-        <button className={cx("tk-tab", mode === "nl" && "tk-tab--on")} onClick={() => setMode("nl")}><Wand2 size={13} /> Describe it</button>
       </div>
 
       {mode === "templates" ? (
@@ -850,7 +859,7 @@ function FlowPanel({ agents, templates, project, onClose, onStarted }: { agents:
       ) : (
         <>
           <p className="tk-hint">Describe the goal in plain language. Aria plans a multi-agent flow from your agents, wires the dependencies, and runs it — you watch each step stream live.</p>
-          <textarea className="aria-mem__textarea" style={{ minHeight: 150 }} placeholder="e.g. Research how auth works in this project, then implement rate-limiting on the login route, then review the change for security issues." value={goal} onChange={(e) => setGoal(e.target.value)} autoFocus />
+          <textarea className="aria-mem__textarea" style={{ flex: 1, minHeight: 180, resize: "none" }} placeholder="e.g. Research how auth works in this project, then implement rate-limiting on the login route, then review the change for security issues." value={goal} onChange={(e) => setGoal(e.target.value)} autoFocus />
           <button className="tk-btn tk-btn--primary" style={{ alignSelf: "flex-end" }} onClick={runPlan} disabled={!goal.trim() || busy}>
             {busy ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />} Plan &amp; run
           </button>
