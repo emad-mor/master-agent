@@ -10,9 +10,9 @@
  * Override the workspace location with the WORKSPACE_DIR env var (absolute
  * path). Default: the `workspace/` folder next to this app. */
 
-import { readdir, mkdir, writeFile } from "node:fs/promises";
+import { readdir, mkdir, writeFile, readFile, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join, resolve, relative, isAbsolute } from "node:path";
 import { randomUUID } from "node:crypto";
 
 export const WORKSPACE_DIR = process.env.WORKSPACE_DIR
@@ -101,6 +101,62 @@ export async function fileTree(slug: string | undefined | null, opts?: { maxDept
 
   const tree = await walk(cwd, "", 0);
   return { root: cwd, tree, truncated };
+}
+
+// ── File content (preview) ──
+
+export type FileContent = {
+  path: string;        // the relative path requested
+  content: string;     // UTF-8 text (empty if binary)
+  size: number;        // bytes on disk
+  truncated: boolean;  // true if we clipped a large file
+  binary: boolean;     // true if it looks like a binary blob (content withheld)
+  tooLarge: boolean;   // true if the file exceeds the hard read ceiling
+};
+
+const PREVIEW_MAX_BYTES = 512 * 1024;   // 512 KB hard ceiling — never read more than this
+const PREVIEW_TEXT_BUDGET = 200 * 1024; // clip the returned text to ~200 KB so the modal stays snappy
+
+/** Read a single project-relative file for preview. Resolves the path INSIDE the
+ *  project root and refuses anything that escapes it (path traversal / absolute
+ *  paths / symlinks pointing out). Caps size and detects binary so the UI never
+ *  tries to render a giant blob. */
+export async function readProjectFile(
+  slug: string | undefined | null,
+  relPath: string,
+): Promise<FileContent | { error: string }> {
+  const { cwd } = await resolveProject(slug);
+  if (!relPath || isAbsolute(relPath)) return { error: "Invalid path" };
+
+  const abs = resolve(cwd, relPath);
+  const within = relative(cwd, abs);
+  // Escapes the root if the relative path climbs out (starts with "..") or is absolute.
+  if (within.startsWith("..") || isAbsolute(within)) return { error: "Path is outside the project" };
+
+  let st;
+  try { st = await stat(abs); } catch { return { error: "File not found" }; }
+  if (st.isDirectory()) return { error: "Path is a directory" };
+
+  const size = st.size;
+  if (size > PREVIEW_MAX_BYTES) {
+    return { path: relPath, content: "", size, truncated: true, binary: false, tooLarge: true };
+  }
+
+  const buf = await readFile(abs);
+  // Binary sniff: a NUL byte in the first 8 KB is a reliable "not text" signal.
+  const sniff = buf.subarray(0, Math.min(buf.length, 8192));
+  const binary = sniff.includes(0);
+  if (binary) {
+    return { path: relPath, content: "", size, truncated: false, binary: true, tooLarge: false };
+  }
+
+  let content = buf.toString("utf8");
+  let truncated = false;
+  if (content.length > PREVIEW_TEXT_BUDGET) {
+    content = content.slice(0, PREVIEW_TEXT_BUDGET);
+    truncated = true;
+  }
+  return { path: relPath, content, size, truncated, binary: false, tooLarge: false };
 }
 
 // ── Dropped-file storage ──
