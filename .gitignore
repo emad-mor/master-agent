@@ -13,5 +13,13 @@ app/data
 app/whisper
 app/tts
 
+# Secrets safety net — no .env anywhere reaches a copy, but keep the example.
+**/.env
+**/.env.*
+!**/.env.example
+
+# TypeScript incremental build artifacts.
+**/*.tsbuildinfo
+
 .DS_Store
 *.log

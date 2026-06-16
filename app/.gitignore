@@ -7,6 +7,7 @@ dist
 *.log
 .DS_Store
 next-env.d.ts
+*.tsbuildinfo
 
 # Local layered memory (core facts + per-project turns/summaries/themes).
 # Local-only, never committed.
