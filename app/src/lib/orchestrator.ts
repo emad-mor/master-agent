@@ -28,7 +28,7 @@ import { getAgent, listAgents, type Agent } from "@/lib/agents";
 import { buildSkillBrief } from "@/lib/skills";
 import { envForAgent } from "@/lib/credentials";
 import { getTemplate } from "@/lib/flow-templates";
-import { listCore, listThemes, listTurns, appendTurn, evictIfNeeded } from "@/lib/persona-memory";
+import { listCore, listThemes, listTurns, listSummaries, appendTurn, evictIfNeeded } from "@/lib/persona-memory";
 import { scheduleFlowSnapshot, loadFlowSnapshotSync } from "@/lib/flow-store";
 
 const CLAUDE_BIN = process.platform === "win32" ? "claude.cmd" : "claude";
@@ -874,10 +874,18 @@ async function maybeMemorizeFlow(flowId: string) {
     // themes) biases toward NOT deduping a genuinely new flow.
     const key = normalizeForDedup(distilled).slice(0, 200);
     if (key) {
-      const [priorTurns, priorThemes] = await Promise.all([listTurns(projectKey), listThemes(projectKey)]);
+      // Check all three memory tiers: a re-run's distillation may still be a
+      // recent turn, OR (once evicted) a mid-tier summary, OR a long-tier theme.
+      // Summaries/themes are paraphrased, so match by substring there; recent
+      // Flow turns hold the verbatim distillation, so match by full-slice equality.
+      const [priorTurns, priorSummaries, priorThemes] = await Promise.all([
+        listTurns(projectKey), listSummaries(projectKey), listThemes(projectKey),
+      ]);
+      const sub = key.slice(0, 80);
       const dup =
         priorTurns.some((t) => t.category === "Flow" && normalizeForDedup(t.reply).slice(0, 200) === key) ||
-        priorThemes.some((th) => normalizeForDedup(th.text).includes(key.slice(0, 80)));
+        priorSummaries.some((s) => normalizeForDedup(s.text).includes(sub)) ||
+        priorThemes.some((th) => normalizeForDedup(th.text).includes(sub));
       if (dup) {
         console.info("[orchestrator] flow distillation deduped — already in memory", { flowId, name: flow.name });
         return;
@@ -1014,6 +1022,11 @@ export async function rerunStep(taskId: string, cascade: boolean): Promise<strin
     if (r) resetTask(r);
   }
   flow.paused = false;
+  // Re-evaluate the ingestion gate after the re-run: a flow that first completed
+  // below the gate (memorized claimed) may now cascade into substantial work, and
+  // a flow with materially different learnings should be re-distilled.
+  flow.memorized = false;
+  persistRegistry();
   driveFlow(flow.id);
   return keys;
 }

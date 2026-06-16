@@ -97,6 +97,14 @@ export function useReader() {
   const browserRef = useRef(typeof window !== "undefined" && "speechSynthesis" in window);
   const rafRef = useRef<number | null>(null);
   const fracRef = useRef(0);                 // last pushed activeFraction (throttle React updates)
+  // Mirrors of buffering/duration so the long-lived playFrom closure (bound to
+  // audio.onended for the whole session) always reads CURRENT values instead of
+  // a stale snapshot — otherwise a reply finalizes early when playback outruns
+  // sentence generation (the common case).
+  const bufferingRef = useRef(false);
+  const durationRef = useRef(0);
+  const waitingRef = useRef(false);         // playback caught up to generation and is waiting for the next clip
+  const pausedRef = useRef(false);          // user paused — suppress auto-resume of a parked playback
 
   // Sum of durations of clips BEFORE index i (the timeline offset of clip i).
   const offsetOf = useCallback((i: number) => {
@@ -135,6 +143,7 @@ export function useReader() {
   const stop = useCallback(() => {
     teardown();
     setStatus("idle"); setCurrentTime(0); setDuration(0); setBuffering(false);
+    durationRef.current = 0; bufferingRef.current = false; waitingRef.current = false; pausedRef.current = false;
     setActiveIndex(-1); setActiveFraction(0); fracRef.current = 0; setSentenceList([]);
   }, [teardown]);
 
@@ -154,12 +163,14 @@ export function useReader() {
   const playFrom = useCallback((i: number) => {
     const clips = clipsRef.current;
     if (i >= clips.length) {
-      // Caught up to what's generated. If still buffering, wait; else done.
-      if (buffering) { setStatus("playing"); return; }   // keep activeIndex on the last sentence until the next clip lands
-      setStatus("idle"); setCurrentTime(duration); stopRaf();
+      // Caught up to what's generated. If still buffering, park as "waiting" — the
+      // next clip's arrival (in streamKokoro) resumes us; else playback is done.
+      if (bufferingRef.current) { waitingRef.current = true; setStatus("playing"); return; }
+      setStatus("idle"); setCurrentTime(durationRef.current); stopRaf();
       setActiveIndex(-1); setActiveFraction(0); fracRef.current = 0;
       return;
     }
+    waitingRef.current = false;
     idxRef.current = i;
     setActiveIndex(i); setActiveFraction(0); fracRef.current = 0;   // new sentence is now speaking
     const audio = audioRef.current ?? new Audio();
@@ -171,14 +182,14 @@ export function useReader() {
       setStatus("playing");
       stopRaf(); rafRef.current = requestAnimationFrame(tick);
     }).catch(() => { setStatus("idle"); });
-  }, [buffering, duration, tick, stopRaf]);
+  }, [tick, stopRaf]);   // stable: buffering/duration read via refs, so onended always sees fresh values
 
   // Generate clips sentence-by-sentence; start playback as soon as the first lands.
   const streamKokoro = useCallback(async (text: string, token: number) => {
     const list = sentences(text);
     if (!list.length) { setStatus("idle"); return; }
     setSentenceList(list);   // caption renders these exact chunks; activeIndex points into them
-    setBuffering(true);
+    setBuffering(true); bufferingRef.current = true;
     let started = false;
     for (const sentence of list) {
       if (token !== tokenRef.current) return;
@@ -198,21 +209,29 @@ export function useReader() {
         const clip: Clip = { url, duration: 0, sentence };
         clipsRef.current.push(clip);
         if (!started) { started = true; playFrom(0); }
+        else if (waitingRef.current && !pausedRef.current) { waitingRef.current = false; playFrom(idxRef.current + 1); }   // resume stalled playback (unless user paused)
         void measureDuration(url).then((dur) => {
           if (token !== tokenRef.current) return;
           const delta = dur - clip.duration;
           clip.duration = dur;
-          if (delta) setDuration((d) => d + delta);
+          if (delta) { durationRef.current += delta; setDuration((d) => d + delta); }
         });
       } catch {
         // Sidecar died mid-stream — stop generating, keep what we have.
         break;
       }
     }
-    setBuffering(false);
-    // If playback already caught up to the end while we were buffering, finalize.
-    if (token === tokenRef.current && idxRef.current >= clipsRef.current.length) {
-      setStatus("idle"); setActiveIndex(-1); setActiveFraction(0); fracRef.current = 0;
+    setBuffering(false); bufferingRef.current = false;
+    // Generation finished (or aborted mid-stream). Reconcile playback now that
+    // bufferingRef is false: if playback parked waiting for a clip, kick it once
+    // more — it plays a remaining clip, or finalizes cleanly if there is none
+    // (covers a sidecar that died during a buffering gap). Otherwise, if playback
+    // already ran past the end, finalize.
+    if (token === tokenRef.current) {
+      if (waitingRef.current && !pausedRef.current) { waitingRef.current = false; playFrom(idxRef.current + 1); }
+      else if (!waitingRef.current && idxRef.current >= clipsRef.current.length) {
+        setStatus("idle"); setActiveIndex(-1); setActiveFraction(0); fracRef.current = 0;
+      }
     }
   }, [playFrom]);
 
@@ -222,7 +241,7 @@ export function useReader() {
     for (const s of [...readerStops]) if (s !== selfStopRef.current) s();
     teardown();                  // bumps tokenRef, cancelling any prior session
     const token = tokenRef.current;
-    setStatus("loading"); setCurrentTime(0); setDuration(0);
+    setStatus("loading"); setCurrentTime(0); setDuration(0); durationRef.current = 0; waitingRef.current = false; pausedRef.current = false;
     setActiveIndex(-1); setActiveFraction(0); fracRef.current = 0; setSentenceList([]);
     const engine = await detectEngine();
     if (token !== tokenRef.current) return;
@@ -244,17 +263,24 @@ export function useReader() {
   }, [teardown, streamKokoro]);
 
   const pause = useCallback(() => {
-    if (audioRef.current && !audioRef.current.paused) { audioRef.current.pause(); stopRaf(); setStatus("paused"); return; }
-    if (browserRef.current && window.speechSynthesis.speaking) { try { window.speechSynthesis.pause(); } catch {} setStatus("paused"); }
+    if (browserRef.current && window.speechSynthesis.speaking) { try { window.speechSynthesis.pause(); } catch {} setStatus("paused"); return; }
+    // Mark user-paused so a buffering-gap clip arrival won't auto-resume against
+    // intent; pause the element too if it's actually mid-clip (vs. parked/ended).
+    pausedRef.current = true;
+    if (audioRef.current && !audioRef.current.paused) { audioRef.current.pause(); stopRaf(); }
+    setStatus("paused");
   }, [stopRaf]);
 
   const resume = useCallback(() => {
+    pausedRef.current = false;
+    if (browserRef.current && window.speechSynthesis.paused) { try { window.speechSynthesis.resume(); } catch {} setStatus("playing"); return; }
+    // Parked during a buffering gap (audio ended, waiting for the next clip):
+    // kick playback to the next available clip (or re-park if none yet).
+    if (waitingRef.current) { waitingRef.current = false; playFrom(idxRef.current + 1); return; }
     if (audioRef.current && audioRef.current.src && audioRef.current.paused) {
       void audioRef.current.play().then(() => { setStatus("playing"); rafRef.current = requestAnimationFrame(tick); }).catch(() => {});
-      return;
     }
-    if (browserRef.current && window.speechSynthesis.paused) { try { window.speechSynthesis.resume(); } catch {} setStatus("playing"); }
-  }, [tick]);
+  }, [tick, playFrom]);
 
   // Seek to an absolute second on the timeline → find the clip + offset within it.
   const seek = useCallback((sec: number) => {
@@ -264,6 +290,7 @@ export function useReader() {
     for (let i = 0; i < clips.length; i++) {
       if (target < acc + clips[i].duration || i === clips.length - 1) {
         idxRef.current = i;
+        waitingRef.current = false; pausedRef.current = false;   // explicit reposition cancels parked/paused state
         setActiveIndex(i); fracRef.current = 0; setActiveFraction(0);   // keep the caption in sync with the scrub
         const within = target - acc;
         const audio = audioRef.current ?? new Audio();

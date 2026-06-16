@@ -1057,7 +1057,9 @@ function renderSpokenWords(sentence: string, fraction: number) {
   return tokens.map((tok, j) => {
     const start = pos; pos += tok.length;
     const isSpace = /^\s+$/.test(tok);
-    const on = !isSpace && cursor >= start && cursor < pos;
+    // Inclusive upper bound on the final token so the last word stays lit at
+    // fraction 1.0 (otherwise it un-highlights for a beat at the sentence end).
+    const on = !isSpace && cursor >= start && (cursor < pos || pos >= sentence.length);
     return on ? <span key={j} className="reply-cap__w--on">{tok}</span> : <span key={j}>{tok}</span>;
   });
 }
