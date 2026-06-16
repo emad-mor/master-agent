@@ -305,7 +305,7 @@
 .aria-turn { display: flex; flex-direction: column; gap: 6px; }
 .aria-bubble {
   align-self: flex-end;
-  max-width: 84%;
+  max-width: min(84%, 680px);
   padding: 9px 14px;
   border-radius: 16px 16px 4px 16px;
   background: var(--aria-fill-strong);
@@ -969,9 +969,9 @@
 .home-content {
   position: relative;
   z-index: 2;
-  max-width: 720px;
+  max-width: 1080px;
   margin: 0 auto;
-  padding: clamp(16px, 3vw, 28px) clamp(16px, 4vw, 32px);
+  padding: clamp(16px, 3vw, 28px) clamp(16px, 4vw, 40px);
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -1412,7 +1412,17 @@
 /* Session tabs — deliberately styled as browser-style TABS (squared top, flat
    bottom, sitting on a baseline) so they read differently from the rounded
    gradient suggestion chips. */
-.home-tabs { flex: 0 0 auto; display: flex; align-items: flex-end; gap: 3px; flex-wrap: wrap; margin-bottom: 0; border-bottom: 1px solid var(--color-line); padding-bottom: 0; }
+/* Row = [scrollable tab strip] + [pinned trailing controls]. The baseline that
+   active tabs sit on lives on the ROW so it spans the whole width; only the
+   inner strip scrolls, so New + the tab-picker never scroll out of view. */
+.home-tabsrow { display: flex; align-items: flex-end; gap: 6px; border-bottom: 1px solid var(--color-line); }
+.home-tabs {
+  flex: 1 1 auto; min-width: 0; display: flex; align-items: flex-end; gap: 3px;
+  flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden;
+  scrollbar-width: none;                 /* Firefox */
+}
+.home-tabs::-webkit-scrollbar { height: 0; display: none; }
+.home-tabs__pinned { flex: 0 0 auto; display: flex; align-items: flex-end; gap: 3px; }
 .home-tab {
   position: relative;
   display: inline-flex; align-items: center; gap: 6px;
@@ -1423,7 +1433,7 @@
   background: transparent;
   margin-bottom: -1px;             /* overlap the baseline */
   transition: color .15s, background .15s, border-color .15s;
-  max-width: 220px;
+  max-width: 200px; flex-shrink: 0;
 }
 .home-tab:hover { color: var(--color-ink); background: color-mix(in oklab, var(--color-ink) 5%, transparent); }
 .home-tab--active {
@@ -1445,6 +1455,38 @@
 .home-tab--add:hover, .home-tab--more:hover { color: var(--color-accent); background: color-mix(in oklab, var(--color-accent) 8%, transparent); }
 .home-tab__input { border: none; background: transparent; outline: none; font: inherit; font-size: 12.5px; color: var(--color-ink); width: 110px; }
 .home-tab__rename-ok { display: inline-flex; color: var(--color-accent); margin-left: 2px; cursor: pointer; }
+.home-tab--more { padding: 7px 9px; }
+.home-tab--more-on { color: var(--color-accent); background: color-mix(in oklab, var(--color-accent) 10%, transparent); }
+
+/* Tab-picker dropdown — jump to any session without scrolling the strip */
+.home-tabpick { position: relative; display: inline-flex; }
+.home-tabpick__menu {
+  position: absolute; top: 100%; right: 0; z-index: 40; margin-top: 5px;
+  min-width: 220px; max-width: 320px; max-height: 340px; overflow-y: auto;
+  padding: 5px; border-radius: 12px;
+  background: var(--color-surface); border: 1px solid var(--color-line);
+  box-shadow: 0 18px 50px rgba(0,0,0,0.4);
+  animation: tabpickIn .14s ease;
+}
+:root:not(.dark) .home-tabpick__menu { box-shadow: 0 18px 50px rgba(40,20,60,0.2); }
+@keyframes tabpickIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.home-tabpick__head { padding: 4px 9px 6px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: var(--color-mid); }
+.home-tabpick__item {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%;
+  padding: 7px 9px; border-radius: 8px; text-align: left;
+  font-size: 12.5px; color: var(--color-ink-soft);
+  transition: background .12s, color .12s;
+}
+.home-tabpick__item:hover { background: color-mix(in oklab, var(--color-ink) 6%, transparent); color: var(--color-ink); }
+.home-tabpick__item--active { color: var(--color-accent); font-weight: 600; }
+.home-tabpick__item--active svg { color: var(--color-accent); flex-shrink: 0; }
+.home-tabpick__name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.home-tabpick__all {
+  display: flex; align-items: center; gap: 7px; width: 100%;
+  margin-top: 4px; padding: 7px 9px; border-top: 1px solid var(--color-line); border-radius: 0 0 8px 8px;
+  font-size: 12px; color: var(--color-mid);
+}
+.home-tabpick__all:hover { color: var(--color-accent); background: color-mix(in oklab, var(--color-accent) 8%, transparent); }
 
 /* Suggestion chips for a fresh session — sit under the tabs */
 .home-suggest { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 10px; }
@@ -1636,21 +1678,50 @@
 
 .reply-next { margin-top: 10px; }
 .reply-next__label { display: block; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--aria-fg-faint); margin-bottom: 6px; }
-.reply-next__chips { display: flex; flex-wrap: wrap; gap: 7px; }
+/* Cards (not pills): each shows the action label + the full prompt it runs, so
+   the user knows exactly what each suggestion does without hovering. */
+.reply-next__chips { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
 .reply-next__chip {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 7px 13px; border-radius: 999px;
-  font-size: 12.5px; font-weight: 500; text-align: left;
-  color: var(--aria-fg);
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 10px 12px; border-radius: 12px;
+  text-align: left; color: var(--aria-fg); min-width: 0;
   border: 1px solid rgba(160,110,255,0.4);
-  background: linear-gradient(100deg, rgba(124,44,255,0.14), rgba(196,43,138,0.1));
+  background: linear-gradient(135deg, rgba(124,44,255,0.13), rgba(196,43,138,0.09));
   transition: border-color .15s, background .15s, transform .12s;
 }
-.reply-next__chip:hover { border-color: rgba(160,110,255,0.7); background: linear-gradient(100deg, rgba(124,44,255,0.22), rgba(196,43,138,0.16)); transform: translateY(-1px); }
-.reply-next__chip svg { color: #c79bff; flex-shrink: 0; }
+.reply-next__chip:hover { border-color: rgba(160,110,255,0.7); background: linear-gradient(135deg, rgba(124,44,255,0.22), rgba(196,43,138,0.16)); transform: translateY(-1px); }
+.reply-next__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.reply-next__title { font-size: 13px; font-weight: 600; line-height: 1.2; }
+.reply-next__head svg { color: #c79bff; flex-shrink: 0; }
+.reply-next__desc {
+  font-size: 11.5px; line-height: 1.45; color: var(--aria-fg-dim);
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
 
-.reply-voice { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; opacity: 0.75; transition: opacity .15s; }
+.reply-voicewrap { display: flex; flex-direction: column; gap: 7px; margin-top: 6px; }
+.reply-voice { display: inline-flex; align-items: center; gap: 6px; opacity: 0.75; transition: opacity .15s; }
 .aria-reply:hover .reply-voice { opacity: 1; }
+
+/* Karaoke caption — plain-text spoken sentences; active sentence + word lit up */
+.reply-cap {
+  display: flex; gap: 8px; align-items: flex-start;
+  max-height: 132px; overflow-y: auto;
+  padding: 9px 11px; border-radius: 11px;
+  border: 1px solid rgba(160,110,255,0.28);
+  background: linear-gradient(135deg, rgba(124,44,255,0.07), rgba(196,43,138,0.05));
+  scrollbar-width: thin;
+}
+.reply-cap__icon { color: #c79bff; flex-shrink: 0; margin-top: 2px; opacity: 0.8; }
+.reply-cap__text { font-size: 13px; line-height: 1.6; color: var(--aria-fg-faint); }
+.reply-cap__s { transition: color .2s ease; }
+.reply-cap__s--on { color: var(--aria-fg-dim); }
+.reply-cap__w--on {
+  color: #fff; font-weight: 600;
+  background: linear-gradient(100deg, #8c3cff, #c42b8a);
+  border-radius: 5px; padding: 1px 3px; margin: 0 -1px;
+  box-shadow: 0 1px 8px rgba(124,44,255,0.4);
+}
+:root:not(.dark) .reply-cap__w--on { color: #fff; }
 .reply-voice__btn {
   display: inline-flex; align-items: center; gap: 5px;
   height: 26px; padding: 0 9px; border-radius: 999px;
@@ -1688,4 +1759,6 @@
 
 /* Reply container — give markdown room to breathe */
 .aria-reply { color: var(--aria-fg); }
-.aria-reply .md { color: var(--aria-fg); }
+/* Cap the PROSE measure for readability on the wider canvas — the structured
+   children (next-step cards, flow link) keep the full column width below. */
+.aria-reply .md { color: var(--aria-fg); max-width: 80ch; }

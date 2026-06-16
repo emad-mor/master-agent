@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Sparkles, Mic, ArrowUp, GitBranch, Clock, ArrowRight, AlertCircle, FolderTree, MoreHorizontal, RefreshCw, Loader2, Square, Activity, Paperclip, X, Plus, UploadCloud, FileText, Check, Volume2, VolumeX, Play, Pause, Brain } from "lucide-react";
+import { Sparkles, Mic, ArrowUp, GitBranch, Clock, ArrowRight, AlertCircle, FolderTree, MoreHorizontal, RefreshCw, Loader2, Square, Activity, Paperclip, X, Plus, UploadCloud, FileText, Check, Volume2, VolumeX, Play, Pause, Brain, ChevronDown } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cx } from "@/lib/format";
 import { PERSONA, timeOfDay, QUICK_PROMPTS } from "@/components/persona/persona-config";
@@ -9,6 +9,7 @@ import { FileTreeRail } from "@/components/home/file-tree";
 import { ActivityDrawer } from "@/components/home/activity-drawer";
 import { PersonaMemoryDrawer } from "@/components/persona/persona-memory-drawer";
 import { Markdown } from "@/components/persona/markdown";
+import { useReader, stopAllReaders } from "@/components/tasks/use-reader";
 import "@/components/persona/companion.css";
 
 /* ────────────────────────────────────────────────────────────
@@ -20,25 +21,6 @@ const STORAGE_KEY = "aria.lastDraft";
 const PROJECT_KEY = "aria.activeProject";
 const SPEAK_KEY = "aria.speakReplies";
 const WORKSPACE_KEY = "__workspace__";
-// Auto-speak (when the voice toggle is on) only fires for replies up to this
-// many spoken chars. Longer ones — flow-handoff summaries, big answers — show a
-// manual "Listen" button instead of auto-synthesizing on load.
-const AUTO_SPEAK_MAX = 600;
-const SENTENCE_END = /([.!?]+\s+|\n{2,})/;
-// Strip markdown/emoji so TTS reads prose, not syntax.
-function cleanForSpeech(s: string): string {
-  return s
-    .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{1F000}-\u{1F2FF}]/gu, "")
-    .replace(/```[\s\S]*?```/g, " code block ")
-    .replace(/`([^`]+)`/g, "$1")
-    .replace(/\*\*?([^*]+)\*\*?/g, "$1")
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/^\s*[-*|]\s+/gm, "")
-    .replace(/^\s*#+\s+/gm, "")
-    .replace(/\|/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
 const MIN_RECORDING_MS = 350;
 const WAVE_BARS = 48;
 
@@ -122,18 +104,14 @@ export default function Home() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [dragging, setDragging] = useState(false);
 
-  // ── Voice OUT (TTS) — auto-speak replies + playback controls ──
+  // ── Voice OUT (TTS) ──
+  // A SINGLE engine drives all reply audio: each reply's <ReplyVoice> owns a
+  // useReader instance (streaming, scrubbable, marker-stripped). When "Voice" is
+  // on we auto-play the just-finished reply by tagging its turn id; the reader's
+  // own controls then sit right on that reply. Readers are globally exclusive, so
+  // auto-play + a manual Listen can never overlap. stopAllReaders() stops audio.
   const [speakReplies, setSpeakReplies] = useState(false);
-  const [ttsPlayback, setTtsPlayback] = useState<"idle" | "playing" | "paused">("idle");
-  const [speakingTurn, setSpeakingTurn] = useState<number | null>(null);
-  const [ttsEngine, setTtsEngine] = useState<"kokoro" | "browser" | "checking">("checking");
-  const speakSupportedRef = useRef(typeof window !== "undefined" && "speechSynthesis" in window);
-  const browserVoiceRef = useRef<SpeechSynthesisVoice | null>(null);
-  const speakBufRef = useRef("");                  // un-spoken streamed tail
-  const audioQueueRef = useRef<string[]>([]);      // queued kokoro blob URLs
-  const audioPlayingRef = useRef(false);
-  const audioElRef = useRef<HTMLAudioElement | null>(null);
-  const speechSessionRef = useRef(0);              // bump to cancel in-flight speech
+  const [autoPlayTurnId, setAutoPlayTurnId] = useState<number | null>(null);
 
   // ── Attachments (any dropped file: image / text / doc) ──
   // Saved server-side into the project's .aria-drops/ and referenced by path so
@@ -157,6 +135,8 @@ export default function Home() {
   const [memoryRefresh, setMemoryRefresh] = useState(0);
   const [renamingKey, setRenamingKey] = useState<string | null>(null);
   const [renameText, setRenameText] = useState("");
+  const [pickerOpen, setPickerOpen] = useState(false);            // tab-picker dropdown (pinned at end of tab strip)
+  const tabPickerRef = useRef<HTMLDivElement | null>(null);
 
   // ── Briefing state ──
   const [recentTasks, setRecentTasks] = useState<TaskInfo[]>([]);
@@ -187,125 +167,13 @@ export default function Home() {
     setAttachments((prev) => prev.filter((a) => a.relPath !== relPath));
   }, []);
 
-  // ── TTS engine: Kokoro (/api/speak) with browser speechSynthesis fallback ──
-  // Restore the speak-replies preference + probe the engine + pick a browser voice.
+  // ── Voice preference: restore from storage; on mute, stop all reader audio ──
   useEffect(() => { try { if (localStorage.getItem(SPEAK_KEY) === "1") setSpeakReplies(true); } catch {} }, []);
-  useEffect(() => { try { localStorage.setItem(SPEAK_KEY, speakReplies ? "1" : "0"); } catch {}; if (!speakReplies) { /* stop on mute */ stopSpeech(); } /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [speakReplies]);
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch("/api/speak", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: "." }) });
-        if (!cancelled) setTtsEngine(res.ok ? "kokoro" : "browser");
-      } catch { if (!cancelled) setTtsEngine("browser"); }
-    })();
-    if (speakSupportedRef.current) {
-      const pick = () => {
-        const voices = window.speechSynthesis.getVoices();
-        if (!voices.length) return;
-        browserVoiceRef.current =
-          voices.find((v) => /Aria|Sonia|Jenny|Samantha/i.test(v.name) && /en/i.test(v.lang)) ||
-          voices.find((v) => /en-US|en-GB/i.test(v.lang)) || voices[0] || null;
-      };
-      pick();
-      window.speechSynthesis.addEventListener("voiceschanged", pick);
-      return () => { cancelled = true; window.speechSynthesis.removeEventListener("voiceschanged", pick); };
-    }
-    return () => { cancelled = true; };
-  }, []);
+    try { localStorage.setItem(SPEAK_KEY, speakReplies ? "1" : "0"); } catch {}
+    if (!speakReplies) { stopAllReaders(); setAutoPlayTurnId(null); }
+  }, [speakReplies]);
 
-  const playNextAudio = useCallback(() => {
-    if (audioPlayingRef.current) return;
-    const next = audioQueueRef.current.shift();
-    if (!next) { if (!audioPlayingRef.current) setTtsPlayback((p) => p === "playing" ? "idle" : p); return; }
-    audioPlayingRef.current = true;
-    setTtsPlayback("playing");
-    const audio = audioElRef.current ?? new Audio();
-    audioElRef.current = audio;
-    audio.src = next;
-    const after = () => { URL.revokeObjectURL(next); audioPlayingRef.current = false; if (audioQueueRef.current.length) playNextAudio(); else setTtsPlayback("idle"); };
-    audio.onended = after;
-    audio.onerror = after;
-    audio.play().catch(() => { audioPlayingRef.current = false; });
-  }, []);
-
-  const enqueueKokoro = useCallback(async (sentence: string, token: number) => {
-    const clean = cleanForSpeech(sentence);
-    if (!clean) return;
-    try {
-      const res = await fetch("/api/speak", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: clean }) });
-      if (token !== speechSessionRef.current || !res.ok) return;
-      const blob = await res.blob();
-      if (token !== speechSessionRef.current) return;
-      audioQueueRef.current.push(URL.createObjectURL(blob));
-      playNextAudio();
-    } catch {}
-  }, [playNextAudio]);
-
-  const browserSpeak = useCallback((sentence: string) => {
-    if (!speakSupportedRef.current) return;
-    const clean = cleanForSpeech(sentence);
-    if (!clean) return;
-    const u = new SpeechSynthesisUtterance(clean);
-    u.rate = 1.05;
-    if (browserVoiceRef.current) { u.voice = browserVoiceRef.current; u.lang = browserVoiceRef.current.lang; }
-    u.onstart = () => setTtsPlayback("playing");
-    u.onend = () => { if (!window.speechSynthesis.pending && !window.speechSynthesis.speaking) setTtsPlayback("idle"); };
-    window.speechSynthesis.speak(u);
-  }, []);
-
-  const speakSentence = useCallback((sentence: string) => {
-    if (ttsEngine === "browser") browserSpeak(sentence);
-    else void enqueueKokoro(sentence, speechSessionRef.current);
-  }, [ttsEngine, browserSpeak, enqueueKokoro]);
-
-  // Stream-time pump: speak complete sentences as the reply crystallizes.
-  const pumpSpeech = useCallback((chunk: string) => {
-    if (!speakReplies) return;
-    speakBufRef.current += chunk;
-    const parts = speakBufRef.current.split(SENTENCE_END);
-    if (parts.length >= 3) {
-      const tail = parts[parts.length - 1] ?? "";
-      for (let i = 0; i < parts.length - 1; i += 2) {
-        const s = (parts[i] ?? "") + (parts[i + 1] ?? "");
-        if (s.trim()) speakSentence(s);
-      }
-      speakBufRef.current = tail;
-    }
-  }, [speakReplies, speakSentence]);
-
-  const flushSpeech = useCallback(() => {
-    if (!speakReplies) { speakBufRef.current = ""; return; }
-    const rest = speakBufRef.current.trim();
-    speakBufRef.current = "";
-    if (rest) speakSentence(rest);
-  }, [speakReplies, speakSentence]);
-
-  const stopSpeech = useCallback(() => {
-    speechSessionRef.current += 1;
-    speakBufRef.current = "";
-    audioQueueRef.current.forEach(URL.revokeObjectURL);
-    audioQueueRef.current = [];
-    audioPlayingRef.current = false;
-    if (audioElRef.current) { audioElRef.current.pause(); audioElRef.current.src = ""; }
-    if (speakSupportedRef.current) { try { window.speechSynthesis.cancel(); } catch {} }
-    setTtsPlayback("idle");
-    setSpeakingTurn(null);
-  }, []);
-
-  const pauseSpeech = useCallback(() => {
-    if (ttsEngine === "kokoro") audioElRef.current?.pause();
-    else if (speakSupportedRef.current) { try { window.speechSynthesis.pause(); } catch {} }
-    setTtsPlayback("paused");
-  }, [ttsEngine]);
-
-  const resumeSpeech = useCallback(() => {
-    if (ttsEngine === "kokoro") { const el = audioElRef.current; if (el?.src) void el.play().catch(() => {}); else playNextAudio(); }
-    else if (speakSupportedRef.current) { try { window.speechSynthesis.resume(); } catch {} }
-    setTtsPlayback("playing");
-  }, [ttsEngine, playNextAudio]);
-
-  // Clear the "which turn is speaking" marker when playback fully stops.
   // ── Sessions ("tabs") ──
   const loadSessions = useCallback(async () => {
     try {
@@ -318,6 +186,16 @@ export default function Home() {
     } catch {}
     finally { setSessionsLoaded(true); }
   }, [project]);
+
+  // Dismiss the tab-picker dropdown on outside-click / Escape.
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const onDown = (e: MouseEvent) => { if (tabPickerRef.current && !tabPickerRef.current.contains(e.target as Node)) setPickerOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setPickerOpen(false); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
+  }, [pickerOpen]);
 
   const newSession = useCallback(async () => {
     try {
@@ -560,10 +438,9 @@ export default function Home() {
 
   // ── Claude SSE streaming ──
   const applyEvent = useCallback((turnId: number, event: string, data: unknown) => {
-    // Voice-out side effects (auto-speak streamed sentences).
-    if (event === "text") pumpSpeech((data as { text?: string })?.text ?? "");
-    else if (event === "result" || event === "done") flushSpeech();
-    else if (event === "error") stopSpeech();
+    // When Voice is on, tag a freshly-finished reply so its <ReplyVoice>
+    // auto-plays (the single TTS engine; controls live on that reply).
+    if (speakReplies && (event === "result" || event === "done")) setAutoPlayTurnId(turnId);
 
     setTurns((ts) => ts.map((t) => {
       if (t.id !== turnId) return t;
@@ -585,7 +462,7 @@ export default function Home() {
         default: return t;
       }
     }));
-  }, [pumpSpeech, flushSpeech, stopSpeech]);
+  }, [speakReplies]);
 
   const sendToClaude = useCallback(async () => {
     const prompt = text.trim();
@@ -597,8 +474,8 @@ export default function Home() {
     setTurns((ts) => [...ts, { id, prompt: promptLabel, reply: "", toolUses: [], status: "streaming", startedAt: Date.now(), activity: "Starting..." }]);
     setText("");
     setAttachments([]);
-    stopSpeech();                              // cancel any prior speech
-    if (speakReplies) { speechSessionRef.current += 1; setSpeakingTurn(id); }   // this turn will be read aloud as it streams
+    stopAllReaders();                          // stop any reply still being read aloud
+    setAutoPlayTurnId(null);                   // the next finished reply gets tagged for auto-play
 
     abortRef.current?.abort();
     const ctrl = new AbortController();
@@ -651,7 +528,7 @@ export default function Home() {
     // The turn may have created/updated the session (esp. the first turn) — refresh.
     void loadSessions();
     setMemoryRefresh((n) => n + 1);   // memory grew — refresh the panel if open
-  }, [text, attachments, project, activeSession, turns, applyEvent, loadSessions, stopSpeech, speakReplies]);
+  }, [text, attachments, project, activeSession, turns, applyEvent, loadSessions]);
 
   const stopTurn = useCallback(() => {
     abortRef.current?.abort();
@@ -740,15 +617,13 @@ export default function Home() {
             <span className="home-header__name">{PERSONA.name}</span>
           </div>
           <div className="home-header__right">
-            {speakSupportedRef.current && (
-              <button
-                className={cx("home-tool-btn", speakReplies && "home-tool-btn--on")}
-                onClick={() => setSpeakReplies((v) => !v)}
-                title={speakReplies ? `Voice on${ttsEngine === "kokoro" ? " · Kokoro neural" : ttsEngine === "browser" ? " · browser" : ""} — click to mute` : "Read replies aloud"}
-              >
-                {speakReplies ? <Volume2 size={15} /> : <VolumeX size={15} />} Voice
-              </button>
-            )}
+            <button
+              className={cx("home-tool-btn", speakReplies && "home-tool-btn--on")}
+              onClick={() => setSpeakReplies((v) => !v)}
+              title={speakReplies ? "Voice on — replies are read aloud; click to mute" : "Read replies aloud"}
+            >
+              {speakReplies ? <Volume2 size={15} /> : <VolumeX size={15} />} Voice
+            </button>
             <button className="home-tool-btn" onClick={() => setMemoryOpen(true)} title="Aria's memory — core, persistent & this project's recent/mid/long"><Brain size={15} /> Memory</button>
             <button className="home-tool-btn" onClick={() => setActivityOpen(true)} title="Sessions & recent activity"><Clock size={15} /> Activity</button>
             <a href="/tasks" className="home-nav-btn" title="Mission Control">
@@ -792,47 +667,81 @@ export default function Home() {
 
         {/* Session tabs — the CONTAINER of the conversation. Each is its own
             claude session; all feed memory. Double-click to rename. */}
-        <div className="home-tabs">
-          {!sessionsLoaded && (
-            <>
-              <span className="home-skel home-skel--tab" aria-hidden />
-              <span className="home-skel home-skel--tab" aria-hidden />
-            </>
-          )}
-          {sessionsLoaded && sessions.map((s) => (
-            renamingKey === s.key ? (
-              <span key={s.key} className="home-tab home-tab--active">
-                <input
-                  className="home-tab__input"
-                  value={renameText}
-                  autoFocus
-                  onChange={(e) => setRenameText(e.target.value)}
-                  onBlur={() => void commitRename(s.key)}
-                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void commitRename(s.key); } if (e.key === "Escape") setRenamingKey(null); }}
-                />
-                <span className="home-tab__rename-ok" role="button" tabIndex={0} title="Save" onMouseDown={(e) => { e.preventDefault(); void commitRename(s.key); }}><Check size={11} /></span>
-              </span>
-            ) : (
-              <span
-                key={s.key}
-                className={cx("home-tab", s.key === activeSession && "home-tab--active")}
-                role="button" tabIndex={0}
-                title="Click to switch · double-click to rename"
-                onClick={() => switchSession(s.key)}
-                onDoubleClick={() => { setRenamingKey(s.key); setRenameText(s.label); }}
-                onKeyDown={(e) => { if (e.key === "Enter") switchSession(s.key); if (e.key === "F2") { setRenamingKey(s.key); setRenameText(s.label); } }}
-              >
-                <span className="home-tab__name">{s.label}</span>
-                {sessions.length > 1 && (
-                  <span className="home-tab__close" role="button" tabIndex={0} title="Close session" onClick={(e) => { e.stopPropagation(); void closeSession(s.key); }} onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); void closeSession(s.key); } }}><X size={11} /></span>
+        <div className="home-tabsrow">
+          {/* Scrollable strip — only the session tabs scroll horizontally */}
+          <div className="home-tabs">
+            {!sessionsLoaded && (
+              <>
+                <span className="home-skel home-skel--tab" aria-hidden />
+                <span className="home-skel home-skel--tab" aria-hidden />
+              </>
+            )}
+            {sessionsLoaded && sessions.map((s) => (
+              renamingKey === s.key ? (
+                <span key={s.key} className="home-tab home-tab--active">
+                  <input
+                    className="home-tab__input"
+                    value={renameText}
+                    autoFocus
+                    onChange={(e) => setRenameText(e.target.value)}
+                    onBlur={() => void commitRename(s.key)}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void commitRename(s.key); } if (e.key === "Escape") setRenamingKey(null); }}
+                  />
+                  <span className="home-tab__rename-ok" role="button" tabIndex={0} title="Save" onMouseDown={(e) => { e.preventDefault(); void commitRename(s.key); }}><Check size={11} /></span>
+                </span>
+              ) : (
+                <span
+                  key={s.key}
+                  className={cx("home-tab", s.key === activeSession && "home-tab--active")}
+                  role="button" tabIndex={0}
+                  title="Click to switch · double-click to rename"
+                  onClick={() => switchSession(s.key)}
+                  onDoubleClick={() => { setRenamingKey(s.key); setRenameText(s.label); }}
+                  onKeyDown={(e) => { if (e.key === "Enter") switchSession(s.key); if (e.key === "F2") { setRenamingKey(s.key); setRenameText(s.label); } }}
+                >
+                  <span className="home-tab__name">{s.label}</span>
+                  {sessions.length > 1 && (
+                    <span className="home-tab__close" role="button" tabIndex={0} title="Close session" onClick={(e) => { e.stopPropagation(); void closeSession(s.key); }} onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); void closeSession(s.key); } }}><X size={11} /></span>
+                  )}
+                </span>
+              )
+            ))}
+          </div>
+          {/* Pinned trailing controls — never scroll out of view */}
+          <div className="home-tabs__pinned">
+            <button className="home-tab home-tab--add" onClick={() => void newSession()} title="New session (own context, shared memory)"><Plus size={12} /> New</button>
+            {sessionsLoaded && sessions.length > 0 && (
+              <div className="home-tabpick" ref={tabPickerRef}>
+                <button
+                  className={cx("home-tab home-tab--more", pickerOpen && "home-tab--more-on")}
+                  aria-haspopup="menu" aria-expanded={pickerOpen}
+                  onClick={() => setPickerOpen((o) => !o)}
+                  title="All tabs — jump to any session"
+                >
+                  <ChevronDown size={14} />
+                </button>
+                {pickerOpen && (
+                  <div className="home-tabpick__menu" role="menu">
+                    <div className="home-tabpick__head">{sessions.length} session{sessions.length === 1 ? "" : "s"}</div>
+                    {sessions.map((s) => (
+                      <button
+                        key={s.key}
+                        role="menuitem"
+                        className={cx("home-tabpick__item", s.key === activeSession && "home-tabpick__item--active")}
+                        onClick={() => { switchSession(s.key); setPickerOpen(false); }}
+                      >
+                        <span className="home-tabpick__name">{s.label}</span>
+                        {s.key === activeSession && <Check size={12} />}
+                      </button>
+                    ))}
+                    <button className="home-tabpick__all" role="menuitem" onClick={() => { setPickerOpen(false); setActivityOpen(true); }}>
+                      <MoreHorizontal size={13} /> All sessions &amp; activity
+                    </button>
+                  </div>
                 )}
-              </span>
-            )
-          ))}
-          <button className="home-tab home-tab--add" onClick={() => void newSession()} title="New session (own context, shared memory)"><Plus size={12} /> New</button>
-          {sessions.length > 4 && (
-            <button className="home-tab home-tab--more" onClick={() => setActivityOpen(true)} title="All sessions & activity"><MoreHorizontal size={13} /> More</button>
-          )}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* ── Tab panel: holds this session's conversation + input ── */}
@@ -885,7 +794,9 @@ export default function Home() {
                             </a>
                           )
                       )}
-                      {/* Clickable next-step suggestions parsed from the reply */}
+                      {/* Clickable next-step suggestions parsed from the reply.
+                          Each card shows the short label AND the full prompt it
+                          will run, so it's clear what each one does at a glance. */}
                       {t.status !== "streaming" && (t.suggestions?.length ?? 0) > 0 && (
                         <div className="reply-next">
                           <span className="reply-next__label">Next steps</span>
@@ -894,20 +805,24 @@ export default function Home() {
                               <button
                                 key={i}
                                 className="reply-next__chip"
-                                title={s.prompt}
+                                title={`Run: ${s.prompt}`}
                                 onClick={() => { setText(s.prompt); inputRef.current?.focus(); }}
                               >
-                                {s.label} <ArrowRight size={12} />
+                                <span className="reply-next__head">
+                                  <span className="reply-next__title">{s.label}</span>
+                                  <ArrowRight size={13} />
+                                </span>
+                                <span className="reply-next__desc">{s.prompt}</span>
                               </button>
                             ))}
                           </div>
                         </div>
                       )}
                       {t.reply && t.status !== "streaming" && (
-                        // Auto-speak only short replies — synthesizing a long one
-                        // (e.g. a flow-handoff summary) is slow and churns the
-                        // sidecar; longer replies keep a manual "Listen" button.
-                        <ReplyVoice text={t.reply} cleanForSpeech={cleanForSpeech} autoLoad={speakReplies && cleanForSpeech(stripSuggestions(t.reply)).length <= AUTO_SPEAK_MAX} />
+                        // Streaming "Listen" — starts after the first sentence
+                        // synthesizes, so even a long flow-handoff summary plays
+                        // back quickly. Markers are stripped inside the reader.
+                        <ReplyVoice text={t.reply} autoPlay={t.id === autoPlayTurnId} />
                       )}
                     </div>
                   )}
@@ -1046,139 +961,46 @@ function formatAgo(ts: number): string {
   return `${Math.floor(diff / 86400_000)}d ago`;
 }
 
-// Per-reply audio player with a SCRUBBABLE TIMELINE. On "Listen", it synthesizes
-// the WHOLE reply into one continuous <audio> element (single /api/speak call),
-// giving native currentTime/duration/seek. Self-contained: owns its own audio,
-// independent of the streaming auto-speak. Falls back to browser speech (no
-// timeline) when Kokoro is unavailable.
-function ReplyVoice({ text, cleanForSpeech, autoLoad = false }: { text: string; cleanForSpeech: (s: string) => string; autoLoad?: boolean }) {
-  const [state, setState] = useState<"idle" | "loading" | "ready" | "playing" | "paused" | "browser" | "error">("idle");
-  const [cur, setCur] = useState(0);
-  const [dur, setDur] = useState(0);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const urlRef = useRef<string | null>(null);
+// Per-reply audio player with a SCRUBBABLE TIMELINE — the single TTS engine for
+// replies. On "Listen" (or auto-play when Voice is on) it STREAMS the reply
+// sentence-by-sentence via useReader, so audio starts after the first sentence
+// is synthesized instead of waiting for the whole reply. Action markers
+// ([[NEXT]]/[[FLOW]]/[[ASK]]) are stripped inside the reader, never read aloud.
+// Readers are globally exclusive, so the controls you see ALWAYS drive the audio
+// you hear — auto-play and a manual Listen can never overlap.
+function ReplyVoice({ text, autoPlay = false }: { text: string; autoPlay?: boolean }) {
+  const { status, currentTime, duration, buffering, sentenceList, activeIndex, activeFraction, play, pause, resume, stop, seek } = useReader();
   const seekingRef = useRef(false);
+  const [scrub, setScrub] = useState<number | null>(null);   // local value while dragging
 
-  // Build the audio element once, lazily on first Listen.
-  const ensureAudio = useCallback(async (): Promise<HTMLAudioElement | "browser" | null> => {
-    if (audioRef.current) return audioRef.current;
-    const clean = cleanForSpeech(text);
-    if (!clean) return null;
-    const res = await fetch("/api/speak", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: clean.slice(0, 6000) }) });
-    if (!res.ok) return "browser";
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    urlRef.current = url;
-    const audio = new Audio();
-    audio.preload = "auto";
-    const grabDur = () => { if (Number.isFinite(audio.duration) && audio.duration > 0) setDur(audio.duration); };
-    audio.addEventListener("loadedmetadata", grabDur);
-    audio.addEventListener("durationchange", grabDur);   // some browsers populate duration late
-    audio.addEventListener("canplay", grabDur);
-    audio.addEventListener("canplaythrough", grabDur);
-    audio.addEventListener("timeupdate", () => { if (!seekingRef.current) setCur(audio.currentTime); });
-    audio.addEventListener("ended", () => { setState("ready"); setCur(0); audio.currentTime = 0; });
-    audio.src = url;
-    audio.load();                                        // force metadata load so the scrubber's duration is ready
-    audioRef.current = audio;
-    // Wait briefly for metadata so the timeline appears immediately (don't hang forever).
-    await new Promise<void>((resolve) => {
-      if (Number.isFinite(audio.duration) && audio.duration > 0) return resolve();
-      const done = () => { audio.removeEventListener("loadedmetadata", done); audio.removeEventListener("error", done); resolve(); };
-      audio.addEventListener("loadedmetadata", done);
-      audio.addEventListener("error", done);
-      setTimeout(done, 2500);                            // cap the wait
-    });
-    return audio;
-  }, [text, cleanForSpeech]);
-
-  const play = useCallback(async () => {
-    if (state === "playing") return;
-    if (audioRef.current) { void audioRef.current.play(); setState("playing"); return; }
-    setState("loading");
-    try {
-      const a = await ensureAudio();
-      if (a === "browser") {
-        // Fallback: browser speech, no timeline.
-        if ("speechSynthesis" in window) {
-          const u = new SpeechSynthesisUtterance(cleanForSpeech(text).slice(0, 8000));
-          u.rate = 1.05; u.onend = () => setState("ready");
-          window.speechSynthesis.cancel(); window.speechSynthesis.speak(u);
-          setState("browser");
-        } else setState("error");
-        return;
-      }
-      if (!a) { setState("idle"); return; }
-      await a.play();
-      setState("playing");
-    } catch { setState("error"); }
-  }, [state, ensureAudio, cleanForSpeech, text]);
-
-  const pause = useCallback(() => {
-    if (state === "browser") { try { window.speechSynthesis.pause(); } catch {} setState("paused"); return; }
-    audioRef.current?.pause(); setState("paused");
-  }, [state]);
-  const resume = useCallback(() => {
-    if (state === "browser") { try { window.speechSynthesis.resume(); } catch {} setState("browser"); return; }
-    void audioRef.current?.play(); setState("playing");
-  }, [state]);
-  const stop = useCallback(() => {
-    if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = 0; }
-    try { window.speechSynthesis.cancel(); } catch {}
-    setCur(0); setState(audioRef.current ? "ready" : "idle");
-  }, []);
-
-  const seek = useCallback((t: number) => {
-    const a = audioRef.current;
-    if (!a || !dur) return;
-    a.currentTime = Math.max(0, Math.min(dur, t));
-    setCur(a.currentTime);
-  }, [dur]);
-
-  // Auto-prepare the timeline when Voice is on: synthesize the clip up front so
-  // the scrubber is ready immediately — but DON'T play (the streaming speech
-  // already read it live; auto-playing here would double the audio). Leaves the
-  // player at "ready" / 0:00 for instant replay + seek.
-  const autoLoadedRef = useRef(false);
+  // Auto-play exactly once when this reply is tagged (Voice on + just finished).
+  const didAutoRef = useRef(false);
   useEffect(() => {
-    if (!autoLoad || autoLoadedRef.current) return;
-    autoLoadedRef.current = true;   // run exactly once; setState("loading") must NOT re-trigger this
-    setState("loading");
-    let mounted = true;
-    (async () => {
-      try {
-        const a = await ensureAudio();
-        if (!mounted) return;
-        setState(a && a !== "browser" ? "ready" : "idle");   // Kokoro down → plain Listen button
-      } catch { if (mounted) setState("idle"); }
-    })();
-    return () => { mounted = false; };
-  }, [autoLoad, ensureAudio]);
-
-  // Clean up the blob URL on unmount.
-  useEffect(() => () => {
-    audioRef.current?.pause();
-    if (urlRef.current) URL.revokeObjectURL(urlRef.current);
-    try { window.speechSynthesis?.cancel(); } catch {}
-  }, []);
+    if (autoPlay && !didAutoRef.current && text.trim()) { didAutoRef.current = true; void play(text); }
+  }, [autoPlay, text, play]);
 
   const fmt = (s: number) => { const m = Math.floor(s / 60); const r = Math.floor(s % 60); return `${m}:${String(r).padStart(2, "0")}`; };
-  const playing = state === "playing" || state === "browser";
-  const hasTimeline = (state === "playing" || state === "paused" || state === "ready") && dur > 0;
+  const cur = scrub ?? currentTime;
+  const dur = duration;
+  const playing = status === "playing";
+  const active = status !== "idle";                 // loading | playing | paused
+  const hasTimeline = active && status !== "loading" && dur > 0;
+  const showCaption = active && status !== "loading" && activeIndex >= 0 && sentenceList.length > 0;
 
   return (
+   <div className="reply-voicewrap">
     <div className="reply-voice">
-      {state === "idle" || state === "error" ? (
-        <button className="reply-voice__btn" onClick={() => void play()} title="Read aloud">
-          <Volume2 size={13} /> {state === "error" ? "Retry voice" : "Listen"}
+      {!active ? (
+        <button className="reply-voice__btn" onClick={() => void play(text)} title="Read aloud">
+          <Volume2 size={13} /> Listen
         </button>
-      ) : state === "loading" ? (
+      ) : status === "loading" ? (
         <span className="reply-voice__btn reply-voice__btn--on"><Loader2 size={13} className="animate-spin" /> Synthesizing…</span>
       ) : (
         <>
           {playing
             ? <button className="reply-voice__btn reply-voice__btn--on" onClick={pause} title="Pause"><Pause size={13} /></button>
-            : <button className="reply-voice__btn reply-voice__btn--on" onClick={() => (state === "ready" ? void play() : resume())} title="Play"><Play size={13} fill="currentColor" /></button>}
+            : <button className="reply-voice__btn reply-voice__btn--on" onClick={resume} title="Play"><Play size={13} fill="currentColor" /></button>}
           <button className="reply-voice__btn" onClick={stop} title="Stop"><Square size={11} fill="currentColor" /></button>
           {hasTimeline ? (
             <div className="reply-voice__timeline">
@@ -1187,12 +1009,12 @@ function ReplyVoice({ text, cleanForSpeech, autoLoad = false }: { text: string; 
                 className="reply-voice__scrub"
                 type="range" min={0} max={Math.max(dur, 0.1)} step={0.05} value={Math.min(cur, dur)}
                 onMouseDown={() => { seekingRef.current = true; }}
-                onMouseUp={() => { seekingRef.current = false; }}
-                onChange={(e) => { const v = parseFloat(e.target.value); setCur(v); seek(v); }}
+                onMouseUp={() => { seekingRef.current = false; if (scrub != null) { seek(scrub); setScrub(null); } }}
+                onChange={(e) => { const v = parseFloat(e.target.value); setScrub(v); if (!seekingRef.current) { seek(v); setScrub(null); } }}
                 style={{ ["--pct" as string]: `${dur ? (cur / dur) * 100 : 0}%` }}
                 aria-label="Seek"
               />
-              <span className="reply-voice__time">{fmt(dur)}</span>
+              <span className="reply-voice__time">{fmt(dur)}{buffering && "…"}</span>
             </div>
           ) : (
             <span className="reply-voice__wave" aria-hidden><i /><i /><i /></span>
@@ -1200,5 +1022,42 @@ function ReplyVoice({ text, cleanForSpeech, autoLoad = false }: { text: string; 
         </>
       )}
     </div>
+    {showCaption && <SpokenCaption sentences={sentenceList} activeIndex={activeIndex} fraction={activeFraction} />}
+   </div>
   );
+}
+
+// Karaoke caption: shows the plain-text spoken sentences, highlights the one
+// currently playing, and within it approximates the spoken WORD from elapsed
+// time (Kokoro emits no word timestamps, so this is an interpolation — it can
+// drift slightly). The active sentence auto-scrolls into view for long replies.
+function SpokenCaption({ sentences, activeIndex, fraction }: { sentences: string[]; activeIndex: number; fraction: number }) {
+  const activeRef = useRef<HTMLSpanElement | null>(null);
+  useEffect(() => { activeRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, [activeIndex]);
+  return (
+    <div className="reply-cap" aria-hidden>
+      <span className="reply-cap__icon"><Volume2 size={12} /></span>
+      <div className="reply-cap__text">
+        {sentences.map((s, i) => (
+          i === activeIndex
+            ? <span key={i} ref={activeRef} className="reply-cap__s reply-cap__s--on">{renderSpokenWords(s, fraction)}{" "}</span>
+            : <span key={i} className="reply-cap__s">{s}{" "}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Split the active sentence into word/space tokens and light the word whose
+// character span contains the elapsed-time cursor (fraction × sentence length).
+function renderSpokenWords(sentence: string, fraction: number) {
+  const tokens = sentence.split(/(\s+)/);
+  const cursor = Math.max(0, Math.min(1, fraction)) * (sentence.length || 1);
+  let pos = 0;
+  return tokens.map((tok, j) => {
+    const start = pos; pos += tok.length;
+    const isSpace = /^\s+$/.test(tok);
+    const on = !isSpace && cursor >= start && cursor < pos;
+    return on ? <span key={j} className="reply-cap__w--on">{tok}</span> : <span key={j}>{tok}</span>;
+  });
 }

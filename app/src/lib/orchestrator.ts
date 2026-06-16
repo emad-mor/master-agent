@@ -28,7 +28,7 @@ import { getAgent, listAgents, type Agent } from "@/lib/agents";
 import { buildSkillBrief } from "@/lib/skills";
 import { envForAgent } from "@/lib/credentials";
 import { getTemplate } from "@/lib/flow-templates";
-import { listCore, listThemes, appendTurn, evictIfNeeded } from "@/lib/persona-memory";
+import { listCore, listThemes, listTurns, appendTurn, evictIfNeeded } from "@/lib/persona-memory";
 import { scheduleFlowSnapshot, loadFlowSnapshotSync } from "@/lib/flow-store";
 
 const CLAUDE_BIN = process.platform === "win32" ? "claude.cmd" : "claude";
@@ -599,6 +599,38 @@ function finalize(rec: TaskRecord, status: TaskStatus, code: number | null) {
 
 const SUMMARY_MODEL = process.env.ARIA_MEMORY_MODEL || "claude-haiku-4-5-20251001";
 
+// ── Memory ingestion gate ──
+// Trivial flows (a one-shot test, a no-op) used to write a memory turn that then
+// rolled through eviction into long-term themes and burned a Haiku call each.
+// Gate the write on: at least N successful STEPS (a flow's unit is steps, not
+// turns) AND (enough notional cost OR enough tokens). costUsd from the CLI is
+// notional and frequently undefined on a subscription, so the token floor is an
+// OR-fallback — never an AND — or legitimate flows would be silently dropped.
+// All thresholds are env-tunable for tuning without a redeploy.
+const MEMORIZE_MIN_STEPS = Number(process.env.ARIA_MEMORIZE_MIN_STEPS || 2);
+const MEMORIZE_MIN_COST_USD = Number(process.env.ARIA_MEMORIZE_MIN_COST_USD || 0.02);
+const MEMORIZE_MIN_TOKENS = Number(process.env.ARIA_MEMORIZE_MIN_TOKENS || 8000);
+
+export type MemorizeGate = { ok: boolean; successCount: number; totalCostUsd: number; totalTokens: number };
+
+/** Pure, testable predicate: is a finished flow substantial enough to memorize?
+ *  Only `done` steps count toward the floors. Takes the bare Task fields so it
+ *  can be unit-tested without constructing full TaskRecords. */
+export function shouldMemorizeFlow(tasks: Pick<Task, "status" | "costUsd" | "tokens">[]): MemorizeGate {
+  const done = tasks.filter((t) => t.status === "done");
+  const successCount = done.length;
+  const totalCostUsd = done.reduce((s, t) => s + (t.costUsd ?? 0), 0);
+  const totalTokens = done.reduce((s, t) => s + ((t.tokens?.input ?? 0) + (t.tokens?.output ?? 0)), 0);
+  const ok = successCount >= MEMORIZE_MIN_STEPS && (totalCostUsd >= MEMORIZE_MIN_COST_USD || totalTokens >= MEMORIZE_MIN_TOKENS);
+  return { ok, successCount, totalCostUsd, totalTokens };
+}
+
+/** Normalize text for dedup comparison: lowercase, collapse whitespace, drop
+ *  punctuation. A re-run of the same template distills near-identically. */
+export function normalizeForDedup(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+}
+
 /** Run a one-shot Haiku prompt and return its text. Shared by summarizeTask,
  *  flow distillation, and the handoff route. Returns "" on any failure. */
 export async function runHaiku(prompt: string, timeoutMs = 30_000): Promise<string> {
@@ -792,6 +824,18 @@ async function maybeMemorizeFlow(flowId: string) {
   if (!recs.length) return;
   if (!recs.every((r) => ["done", "error", "stopped"].includes(r.task.status))) return;   // still running
   if (!recs.some((r) => r.task.status === "done")) return;                                // nothing succeeded
+
+  // Ingestion gate: skip trivial flows so they don't pollute long-term memory.
+  // Claim memorized=true on the gated path too, so the per-step re-fire (this
+  // function runs once per finishing step) doesn't re-evaluate or later write.
+  const gate = shouldMemorizeFlow(recs.map((r) => r.task));
+  if (!gate.ok) {
+    console.info("[orchestrator] flow not memorized — below ingestion gate", { flowId, name: flow.name, ...gate });
+    flow.memorized = true;
+    persistRegistry();
+    return;
+  }
+
   flow.memorized = true;   // claim BEFORE the async work so a racing step can't double-fire
   persistRegistry();       // persist the claim so a restart mid-distill doesn't re-run it
 
@@ -823,6 +867,22 @@ async function maybeMemorizeFlow(flowId: string) {
       child.stdin!.write(prompt); child.stdin!.end();
     });
     if (!distilled) return;
+
+    // Dedup: a re-run of the same template distills near-identically. Skip if a
+    // prior "Flow" memory turn matches, or an existing theme already contains it.
+    // Strict matching (full-slice equality for turns; a long substring for
+    // themes) biases toward NOT deduping a genuinely new flow.
+    const key = normalizeForDedup(distilled).slice(0, 200);
+    if (key) {
+      const [priorTurns, priorThemes] = await Promise.all([listTurns(projectKey), listThemes(projectKey)]);
+      const dup =
+        priorTurns.some((t) => t.category === "Flow" && normalizeForDedup(t.reply).slice(0, 200) === key) ||
+        priorThemes.some((th) => normalizeForDedup(th.text).includes(key.slice(0, 80)));
+      if (dup) {
+        console.info("[orchestrator] flow distillation deduped — already in memory", { flowId, name: flow.name });
+        return;
+      }
+    }
 
     await appendTurn(projectKey, {
       prompt: `[flow completed] ${flow.name}`,
