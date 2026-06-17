@@ -74,7 +74,7 @@ export function ActivityDrawer({ open, project, projectName, tasks, activeSessio
           ) : (
             <>
               <Clock size={15} style={{ color: "#c79bff" }} />
-              <span className="adrawer__title">Activity &amp; Sessions</span>
+              <span className="adrawer__title">Archive</span>
               <span className="adrawer__proj">· {projectName}</span>
             </>
           )}

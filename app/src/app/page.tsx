@@ -6,7 +6,9 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { cx } from "@/lib/format";
 import { PERSONA, timeOfDay, QUICK_PROMPTS } from "@/components/persona/persona-config";
 import { FileTreeRail } from "@/components/home/file-tree";
+import { ReposRail } from "@/components/home/repos-rail";
 import { ActivityDrawer } from "@/components/home/activity-drawer";
+import { StatusBar } from "@/components/home/status-bar";
 import { PersonaMemoryDrawer } from "@/components/persona/persona-memory-drawer";
 import { Markdown } from "@/components/persona/markdown";
 import { useReader, stopAllReaders } from "@/components/tasks/use-reader";
@@ -165,6 +167,7 @@ export default function Home() {
   const [sessionsLoaded, setSessionsLoaded] = useState(false);   // first sessions fetch resolved
   const [hydrating, setHydrating] = useState(false);             // tab history loading from disk
   const [treePinned, setTreePinned] = useState(false);
+  const [reposPinned, setReposPinned] = useState(false);
   const [activityOpen, setActivityOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [memoryRefresh, setMemoryRefresh] = useState(0);
@@ -632,7 +635,7 @@ export default function Home() {
 
   return (
     <main
-      className={cx("home-root", treePinned && "home-root--railed")}
+      className={cx("home-root", treePinned && "home-root--railed", reposPinned && "home-root--repos-railed")}
       onDragEnter={(e) => { e.preventDefault(); if (e.dataTransfer?.types?.includes("Files")) setDragging(true); }}
       onDragOver={(e) => { e.preventDefault(); }}
       onDragLeave={(e) => { if (e.relatedTarget === null || !(e.currentTarget as Node).contains(e.relatedTarget as Node)) setDragging(false); }}
@@ -650,6 +653,8 @@ export default function Home() {
 
       {/* File tree — docked left rail (hover to peek, pin to keep open) */}
       <FileTreeRail project={project} projectName={projectName} onPinnedChange={setTreePinned} onPick={(rel) => { setAttachments((p) => p.some((a) => a.relPath === rel) ? p : [...p, { relPath: rel, name: rel.split("/").pop() || rel }]); inputRef.current?.focus(); }} />
+      {/* Connected repositories — docked right rail with live git state */}
+      <ReposRail onPinnedChange={setReposPinned} />
       <ActivityDrawer open={activityOpen} project={project} projectName={projectName} tasks={recentTasks} activeSessionKey={activeSession} onClose={() => setActivityOpen(false)} onOpenSession={(k) => { switchSession(k); }} onPickUp={(t) => { setText(t); inputRef.current?.focus(); }} />
       <PersonaMemoryDrawer open={memoryOpen} onClose={() => setMemoryOpen(false)} refreshKey={memoryRefresh} project={project} projectName={projectName} />
 
@@ -705,6 +710,7 @@ export default function Home() {
             <a href="/tasks" className="home-nav-btn" title="Mission Control">
               <GitBranch size={15} /> Mission Control
             </a>
+            <StatusBar />
             <ThemeToggle />
           </div>
         </header>

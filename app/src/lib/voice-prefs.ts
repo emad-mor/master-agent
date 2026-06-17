@@ -6,7 +6,7 @@
 
 export type VoiceOption = { id: string; label: string };
 
-export const DEFAULT_VOICE = "af_heart";
+export const DEFAULT_VOICE = "am_puck";   // "Puck" (American · Male)
 
 export const VOICE_GROUPS: { group: string; voices: VoiceOption[] }[] = [
   { group: "American · Female", voices: [
