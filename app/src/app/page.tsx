@@ -105,6 +105,7 @@ export default function Home() {
   const hydratedRef = useRef<string | null>(null);   // which session's history is loaded
   const abortRef = useRef<AbortController | null>(null);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
+  const stickToBottomRef = useRef(true);   // auto-follow the stream only when at/near the bottom
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
   // ── Voice state ──
@@ -517,6 +518,7 @@ export default function Home() {
     const id = ++turnSeqRef.current;
     const sentAtts = attachments;
     const promptLabel = prompt || `(${sentAtts.length} attached file${sentAtts.length === 1 ? "" : "s"})`;
+    stickToBottomRef.current = true;   // sending re-pins to the bottom
     setTurns((ts) => [...ts, { id, prompt: promptLabel, reply: "", toolUses: [], status: "streaming", startedAt: Date.now(), activity: "Starting..." }]);
     setText("");
     setAttachments([]);
@@ -582,9 +584,17 @@ export default function Home() {
   }, []);
 
   // ── Scroll transcript ──
+  // Only auto-follow the stream when the user is already at/near the bottom. If
+  // they've scrolled up to read, leave them put (don't yank to the bottom on
+  // every streamed chunk). Sending a message re-pins to the bottom.
+  const onTranscriptScroll = useCallback(() => {
+    const el = transcriptRef.current;
+    if (!el) return;
+    stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+  }, []);
   useEffect(() => {
     const el = transcriptRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (el && stickToBottomRef.current) el.scrollTop = el.scrollHeight;
   }, [turns]);
 
   // ── Elapsed timer for active turn ──
@@ -659,34 +669,39 @@ export default function Home() {
         {/* Top bar */}
         <header className="home-header">
           <div className="home-header__left">
-            <span className="aria-head__spark"><Sparkles size={18} /></span>
+            <span className="home-header__orb" aria-hidden>
+              <span className="home-header__orb-ring" />
+              <Sparkles size={18} />
+            </span>
             <span className="home-header__name">{PERSONA.name}</span>
           </div>
           <div className="home-header__right">
-            <button
-              className={cx("home-tool-btn", speakReplies && "home-tool-btn--on")}
-              onClick={() => setSpeakReplies((v) => !v)}
-              title={speakReplies ? "Voice on — replies are read aloud; click to mute" : "Read replies aloud"}
-            >
-              {speakReplies ? <Volume2 size={15} /> : <VolumeX size={15} />} Voice
-            </button>
-            {speakReplies && (
-              <select
-                className="home-voice-select"
-                value={voice}
-                title="Pick the reading voice (Kokoro) — previews on change"
-                aria-label="Reading voice"
-                onChange={(e) => { const v = e.target.value; setVoice(v); setVoiceState(v); void previewVoice(v); }}
+            <div className={cx("home-voicegroup", speakReplies && "home-voicegroup--on")}>
+              <button
+                className={cx("home-voicegroup__toggle", speakReplies && "home-voicegroup__toggle--on")}
+                onClick={() => setSpeakReplies((v) => !v)}
+                title={speakReplies ? "Voice on — replies are read aloud; click to mute" : "Read replies aloud"}
               >
-                {VOICE_GROUPS.map((g) => (
-                  <optgroup key={g.group} label={g.group}>
-                    {g.voices.map((vo) => <option key={vo.id} value={vo.id}>{vo.label}</option>)}
-                  </optgroup>
-                ))}
-              </select>
-            )}
+                {speakReplies ? <Volume2 size={15} /> : <VolumeX size={15} />} Voice
+              </button>
+              {speakReplies && (
+                <select
+                  className="home-voicegroup__select"
+                  value={voice}
+                  title="Pick the reading voice (Kokoro) — previews on change"
+                  aria-label="Reading voice"
+                  onChange={(e) => { const v = e.target.value; setVoice(v); setVoiceState(v); void previewVoice(v); }}
+                >
+                  {VOICE_GROUPS.map((g) => (
+                    <optgroup key={g.group} label={g.group}>
+                      {g.voices.map((vo) => <option key={vo.id} value={vo.id}>{vo.label}</option>)}
+                    </optgroup>
+                  ))}
+                </select>
+              )}
+            </div>
             <button className="home-tool-btn" onClick={() => setMemoryOpen(true)} title={`${PERSONA.name}'s memory — core, persistent & this project's recent/mid/long`}><Brain size={15} /> Memory</button>
-            <button className="home-tool-btn" onClick={() => setActivityOpen(true)} title="Sessions & recent activity"><Clock size={15} /> Activity</button>
+            <button className="home-tool-btn" onClick={() => setActivityOpen(true)} title="Archive — all sessions & recent activity"><Clock size={15} /> Archive</button>
             <a href="/tasks" className="home-nav-btn" title="Mission Control">
               <GitBranch size={15} /> Mission Control
             </a>
@@ -803,7 +818,7 @@ export default function Home() {
                       </button>
                     ))}
                     <button className="home-tabpick__all" role="menuitem" onClick={() => { setPickerOpen(false); setActivityOpen(true); }}>
-                      <MoreHorizontal size={13} /> All sessions &amp; activity
+                      <MoreHorizontal size={13} /> Open archive (all sessions)
                     </button>
                   </div>
                 )}
@@ -832,7 +847,7 @@ export default function Home() {
             </div>
           ) : (
             /* Scrollable transcript */
-            <div ref={transcriptRef} className="home-transcript">
+            <div ref={transcriptRef} className="home-transcript" onScroll={onTranscriptScroll}>
               {turns.map((t) => (
                 <div key={t.id} className="aria-turn">
                   {t.kind === "handoff"
