@@ -1,12 +1,12 @@
 "use client";
 
-// AriaThinking — cinematic "thinking" state, ported from the agentic-ux-prototype
+// DaryanThinking — cinematic "thinking" state, ported from the agentic-ux-prototype
 // CompanionThinking: a breathing center star, orbiting satellite stars, a
 // multi-colour glow, and cycling status phrases. Pure visual; shown while Claude
 // is preparing / has not yet streamed any text.
 
 import { useEffect, useRef, useState } from "react";
-import "./aria-thinking.css";
+import "./daryan-thinking.css";
 
 const STATUS_PHRASES = [
   "Reading the project…",
@@ -43,7 +43,7 @@ function starPath(size: number) {
   return `M${h} 0C${h * 1.08} ${h * 0.52},${h * 1.48} ${h * 0.92},${size} ${h}C${h * 1.48} ${h * 1.08},${h * 1.08} ${h * 1.48},${h} ${size}C${h * 0.92} ${h * 1.48},${h * 0.52} ${h * 1.08},0 ${h}C${h * 0.52} ${h * 0.92},${h * 0.92} ${h * 0.52},${h} 0Z`;
 }
 
-export function AriaThinking() {
+export function DaryanThinking() {
   const [idx, setIdx] = useState(0);
   const [fading, setFading] = useState(false);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);

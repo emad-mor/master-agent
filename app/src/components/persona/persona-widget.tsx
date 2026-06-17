@@ -6,7 +6,7 @@ import { Mic, ArrowUp, Sparkles, X, Loader2, Wrench, AlertCircle, Volume2, Volum
 import { cx } from "@/lib/format";
 import { PERSONA, timeOfDay, QUICK_PROMPTS } from "./persona-config";
 import { PersonaMemoryDrawer } from "./persona-memory-drawer";
-import { AriaThinking } from "./aria-thinking";
+import { DaryanThinking } from "./daryan-thinking";
 import "./companion.css";
 
 const STORAGE_KEY = "aria.lastDraft";
@@ -662,7 +662,7 @@ export function PersonaWidget() {
               {/* Body: thinking star, or transcript, or greeting */}
               {showThinking && turns.length === 1 && !turns[0].reply ? (
                 <div className="aria-transcript" style={{ justifyContent: "center" }}>
-                  <AriaThinking />
+                  <DaryanThinking />
                 </div>
               ) : turns.length === 0 ? (
                 <div className="aria-transcript" style={{ justifyContent: "center" }}>
