@@ -15,9 +15,8 @@
   html{scroll-behavior:smooth}
   body{margin:0;background:radial-gradient(1200px 600px at 80% -10%,rgba(140,60,255,.18),transparent),radial-gradient(900px 500px at 0% 110%,rgba(196,43,138,.14),transparent),var(--bg);
        color:var(--ink);font:16px/1.6 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-  .wrap{max-width:1060px;margin:0 auto;padding:48px 24px 80px}
-  a{color:var(--lilac)}
-  h1,h2,h3{line-height:1.15;margin:0}
+  .wrap{max-width:1080px;margin:0 auto;padding:48px 24px 80px}
+  h1,h2,h3,h4{line-height:1.15;margin:0}
   .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 
   /* hero */
@@ -26,10 +25,10 @@
   .hero::after{content:"";position:absolute;inset:0;background:radial-gradient(500px 240px at 90% 0%,rgba(199,155,255,.18),transparent);pointer-events:none}
   .badge{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--lilac);
          background:rgba(124,44,255,.15);border:1px solid rgba(160,110,255,.35);padding:5px 11px;border-radius:999px}
-  .hero h1{font-size:clamp(34px,6vw,56px);font-weight:800;letter-spacing:-.02em;margin:16px 0 8px}
+  .hero h1{font-size:clamp(34px,6vw,54px);font-weight:800;letter-spacing:-.02em;margin:16px 0 8px}
   .hero h1 .g{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
-  .hero p{color:var(--dim);max-width:60ch;margin:0;font-size:17px}
-  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-top:26px}
+  .hero p{color:var(--dim);max-width:62ch;margin:0;font-size:17px}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:26px}
   .stat{background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
   .stat b{display:block;font-size:30px;font-weight:800;letter-spacing:-.02em;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
   .stat span{font-size:12.5px;color:var(--faint)}
@@ -37,10 +36,10 @@
   section{margin-top:54px}
   .eyebrow{font-size:12.5px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--faint);margin-bottom:6px}
   h2{font-size:26px;font-weight:750;letter-spacing:-.01em}
-  .lede{color:var(--dim);margin:8px 0 22px;max-width:72ch}
+  .lede{color:var(--dim);margin:8px 0 22px;max-width:74ch}
 
-  /* theme cards */
-  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
+  /* capability cards */
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(248px,1fr));gap:14px}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;transition:border-color .15s,transform .15s}
   .card:hover{border-color:rgba(160,110,255,.5);transform:translateY(-2px)}
   .card .ic{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;font-size:19px;background:linear-gradient(135deg,rgba(140,60,255,.25),rgba(196,43,138,.18));border:1px solid rgba(160,110,255,.3);margin-bottom:11px}
@@ -48,29 +47,56 @@
   .card p{color:var(--dim);font-size:14px;margin:6px 0 0}
   .tags{margin-top:11px;display:flex;flex-wrap:wrap;gap:6px}
   .tag{font-size:11px;color:var(--lilac);background:rgba(124,44,255,.12);border:1px solid rgba(160,110,255,.25);border-radius:999px;padding:2px 8px}
+  .pill{display:inline-block;font-family:ui-monospace,monospace;font-size:12px;background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:7px;padding:1px 7px;margin:0 1px}
 
-  /* memory infographic */
+  /* ── HORIZONTAL layered-memory infographic ── */
   .mem{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:26px}
-  .tier{position:relative;display:grid;grid-template-columns:150px 1fr auto;gap:18px;align-items:center;
-        border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin:0 0 12px;background:var(--panel2)}
-  .tier .name{font-weight:750;font-size:16px;display:flex;flex-direction:column;gap:6px}
-  .tier .scope{font-size:10.5px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;width:max-content;padding:2px 8px;border-radius:999px}
-  .scope.glob{color:#ffd27a;background:rgba(224,162,60,.16);border:1px solid rgba(224,162,60,.4)}
-  .scope.proj{color:var(--lilac);background:rgba(124,44,255,.15);border:1px solid rgba(160,110,255,.35)}
-  .tier .desc{color:var(--dim);font-size:14px}
-  .tier .desc .mono{color:var(--ink)}
-  .tier .meta{text-align:right;min-width:120px}
-  .tier .meta b{font-size:13px;color:var(--ink);display:block}
-  .tier .meta span{font-size:11px;color:var(--faint)}
-  .tierwrap{position:relative;border-left:3px solid transparent;border-image:var(--grad) 1;padding-left:0}
-  .flow{display:flex;align-items:center;gap:8px;color:var(--faint);font-size:12.5px;margin:2px 0 12px 18px}
-  .flow .arr{color:var(--magenta);font-weight:800}
-  .inject{margin-top:8px;border:1px dashed rgba(160,110,255,.4);border-radius:14px;padding:16px 18px;background:linear-gradient(135deg,rgba(140,60,255,.08),transparent)}
-  .inject h4{margin:0 0 6px;font-size:14px;color:var(--lilac);text-transform:uppercase;letter-spacing:.4px}
+  /* Core: full-width band on top */
+  .core{display:flex;align-items:center;gap:16px;border-radius:14px;padding:16px 20px;
+        background:linear-gradient(120deg,rgba(224,162,60,.16),rgba(224,162,60,.04));border:1px solid rgba(224,162,60,.4)}
+  .core .k{font-size:18px;font-weight:800;color:#ffd27a;white-space:nowrap}
+  .core .d{color:var(--dim);font-size:14px}
+  .core .b{margin-left:auto;text-align:right;white-space:nowrap}
+  .core .b b{display:block;color:#ffd27a;font-size:13px}
+  .core .b span{font-size:11px;color:var(--faint)}
+  .scopebar{display:flex;align-items:center;gap:10px;margin:20px 2px 12px;color:var(--faint);font-size:12.5px;font-weight:600;letter-spacing:.3px;text-transform:uppercase}
+  .scopebar .ln{flex:1;height:1px;background:var(--line)}
+
+  /* the three per-project tiers, left → right (older →) */
+  .mflow{display:flex;align-items:stretch;gap:0}
+  .mcol{flex:1;min-width:0;background:var(--panel2);border:1px solid var(--line);border-radius:16px;padding:16px 16px 18px;display:flex;flex-direction:column;gap:12px;position:relative}
+  .mcol .top{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+  .mcol h4{font-size:16px;font-weight:750}
+  .mcol .cnt{font-family:ui-monospace,monospace;font-size:12px;color:var(--lilac)}
+  .mcol .form{font-size:12.5px;color:var(--faint)}
+  /* the visual: mini-bars that shrink Recent→Mid→Long to show compression */
+  .stack{display:flex;flex-direction:column;gap:6px;justify-content:flex-end;min-height:120px;padding:6px 0 2px}
+  .stack i{display:block;border-radius:4px;background:var(--grad);opacity:.92}
+  .stack.recent i{height:20px}
+  .stack.mid i{height:10px;opacity:.8}
+  .stack.long i{height:5px;opacity:.62}
+  .mcol .file{font-family:ui-monospace,monospace;font-size:11px;color:var(--faint);margin-top:auto}
+  /* arrows between columns */
+  .marrow{flex:0 0 86px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;color:var(--faint);font-size:11px;line-height:1.3}
+  .marrow .a{font-size:24px;font-weight:800;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;line-height:1}
+  @media(max-width:760px){
+    .mflow{flex-direction:column}
+    .marrow{flex-basis:auto;flex-direction:row;gap:8px;padding:4px 0}
+    .marrow .a{transform:rotate(90deg)}
+    .core{flex-wrap:wrap}.core .b{margin-left:0}
+  }
+
+  .inject{margin-top:16px;border:1px dashed rgba(160,110,255,.4);border-radius:14px;padding:16px 18px;background:linear-gradient(135deg,rgba(140,60,255,.08),transparent)}
+  .inject h4{margin:0 0 6px;font-size:13px;color:var(--lilac);text-transform:uppercase;letter-spacing:.4px}
   .inject p{margin:0;color:var(--dim);font-size:14px}
-  .pill{display:inline-block;font-family:ui-monospace,monospace;font-size:12px;background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:7px;padding:1px 7px;margin:0 2px}
+  .inject .build{margin-top:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-family:ui-monospace,monospace;font-size:12.5px}
+  .chip{background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:8px;padding:3px 9px}
+  .chip.c{color:#ffd27a;border-color:rgba(224,162,60,.4)} .chip.p{color:var(--lilac);border-color:rgba(160,110,255,.35)}
+  .plus{color:var(--faint);font-weight:800} .eq{color:var(--magenta);font-weight:800}
 
   /* bars */
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:680px){.two{grid-template-columns:1fr}}
   .bars{display:flex;flex-direction:column;gap:18px}
   .bar h4{margin:0 0 8px;font-size:15px;font-weight:700;display:flex;justify-content:space-between}
   .bar h4 em{font-style:normal;color:var(--green);font-weight:800}
@@ -78,9 +104,7 @@
   .fill{position:absolute;inset:0 auto 0 0;border-radius:8px 0 0 8px;background:var(--grad);display:flex;align-items:center;justify-content:flex-end;padding-right:10px;font-size:12px;font-weight:700;color:#fff}
   .bar small{color:var(--faint);font-size:12px}
 
-  .two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-  @media(max-width:680px){.two{grid-template-columns:1fr}.tier{grid-template-columns:1fr;gap:8px}.tier .meta{text-align:left}}
-  ul.clean{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:9px}
+  ul.clean{list-style:none;padding:0;margin:14px 0 0;display:flex;flex-direction:column;gap:9px}
   ul.clean li{padding-left:22px;position:relative;color:var(--dim);font-size:14.5px}
   ul.clean li::before{content:"";position:absolute;left:0;top:9px;width:8px;height:8px;border-radius:3px;background:var(--grad)}
   .note{color:var(--faint);font-size:13px;margin-top:10px}
@@ -94,131 +118,130 @@
   <header class="hero">
     <span class="badge">◆ Build Report</span>
     <h1>Daryan — <span class="g">a local, voice-first Claude&nbsp;Code agent</span></h1>
-    <p>What we built this session: a Mission-Control workspace, an end-to-end voice layer, and a layered per-project memory that now injects ~⅔ fewer tokens. Renamed from <em>Aria</em>, dogfoodable on its own source, published as a reusable template.</p>
+    <p>A Mission-Control workspace for parallel agent flows, an end-to-end neural voice layer, and a layered per-project memory that injects roughly two-thirds fewer tokens.</p>
     <div class="stats">
-      <div class="stat"><b>18</b><span>commits, pushed to a private repo</span></div>
-      <div class="stat"><b>59</b><span>tests passing · 0 type errors</span></div>
-      <div class="stat"><b>−77%</b><span>peak cut to injected memory</span></div>
       <div class="stat"><b>4</b><span>memory tiers, per project</span></div>
+      <div class="stat"><b>−77%</b><span>peak cut to injected memory</span></div>
       <div class="stat"><b>28</b><span>selectable neural voices</span></div>
+      <div class="stat"><b>59</b><span>tests · 0 type errors</span></div>
     </div>
   </header>
 
-  <!-- WHAT WE BUILT -->
+  <!-- WHAT IT DOES -->
   <section>
-    <div class="eyebrow">The work</div>
-    <h2>Five themes</h2>
-    <p class="lede">Each shipped, type-checked, and driven in a real browser (Chrome DevTools Protocol), not just unit-tested.</p>
+    <div class="eyebrow">Capabilities</div>
+    <h2>What it does</h2>
+    <p class="lede">The four pieces that carry the product.</p>
     <div class="grid">
-      <div class="card"><div class="ic">🛰️</div><h3>Mission Control & chat UI</h3>
-        <p>New-flow-first board, redesigned task drawer, file-preview rail, wider layout, pinned tab dropdown, auto-growing composer, fixed-in-view header, and a scroll that no longer yanks you down mid-read.</p>
-        <div class="tags"><span class="tag">file preview</span><span class="tag">open media in a tab</span></div></div>
+      <div class="card"><div class="ic">🛰️</div><h3>Mission Control</h3>
+        <p>A board for parallel, multi-step <em>flows</em> — named agents whose outputs feed the next step — running concurrently and streaming live, with token/cost per run.</p>
+        <div class="tags"><span class="tag">parallel agents</span><span class="tag">flows</span></div></div>
+      <div class="card"><div class="ic">💬</div><h3>Conversational workspace</h3>
+        <p>Chat front-and-center with a project file rail: preview any file, open images/audio/video/PDF in a tab, attach files by path, switch projects &amp; sessions.</p>
+        <div class="tags"><span class="tag">file rail</span><span class="tag">previews</span></div></div>
       <div class="card"><div class="ic">🔊</div><h3>Voice, end-to-end</h3>
-        <p>One streaming TTS engine (first sentence plays immediately), karaoke highlight painted <em>onto the formatted answer</em> via the CSS Custom Highlight API, a 28-voice picker, and voice-first replies via a <span class="pill">[[SUMMARY]]</span> recap.</p>
-        <div class="tags"><span class="tag">Kokoro</span><span class="tag">no double-play</span></div></div>
-      <div class="card"><div class="ic">🧠</div><h3>Layered memory</h3>
-        <p>An ingestion gate stops trivial flows polluting memory; crash-safe atomic writes; and a leaner injected block — see the breakdown below.</p>
-        <div class="tags"><span class="tag">−62% / −77%</span><span class="tag">free eviction</span></div></div>
-      <div class="card"><div class="ic">✨</div><h3>Rebrand & self-edit</h3>
-        <p>Aria → Daryan across UI, identity, prompts, the dropped-files folder and the thinking component. A <span class="pill">Daryan&nbsp;source</span> project points the agent at its own repo to edit itself.</p>
-        <div class="tags"><span class="tag">scoped self-edit</span></div></div>
-      <div class="card"><div class="ic">📦</div><h3>Published as a template</h3>
-        <p>Private GitHub repo; copies clone it and <span class="pill">git pull upstream</span> to receive improvements while their own projects, memory and models stay local.</p>
-        <div class="tags"><span class="tag">no secrets tracked</span><span class="tag">fresh memory</span></div></div>
-      <div class="card"><div class="ic">🔬</div><h3>How it held up</h3>
-        <p>Adversarial review caught what tests missed — a voice-playback stall, pause/seek edge cases, and a marker that ate trailing prose. CDP-driving caught client-only crashes that returned HTTP&nbsp;200.</p>
-        <div class="tags"><span class="tag">adversarial verify</span></div></div>
+        <p>Streaming Kokoro TTS that starts on the first sentence, a karaoke highlight painted <em>onto the formatted answer</em>, and a 28-voice picker — all with one globally-exclusive engine (never two voices at once).</p>
+        <div class="tags"><span class="tag">Kokoro</span><span class="tag">karaoke highlight</span></div></div>
+      <div class="card"><div class="ic">🗣️</div><h3>Voice-first replies</h3>
+        <p>Each reply carries a concise spoken <span class="pill">[[SUMMARY]]</span> recap — what's shown and read by default — with the full written detail one “More details” click away.</p>
+        <div class="tags"><span class="tag">summary-first</span><span class="tag">more details</span></div></div>
     </div>
   </section>
 
-  <!-- LAYERED MEMORY -->
+  <!-- LAYERED MEMORY (horizontal) -->
   <section>
-    <div class="eyebrow">Centerpiece</div>
-    <h2>How the layered memory works</h2>
-    <p class="lede">Daryan doesn't keep a flat transcript. Memory is four tiers that <strong>age downward</strong>: a turn starts verbatim, becomes a one-paragraph summary, then folds into a long-term theme. <strong>Core</strong> is the only global tier; the rest are per project, so juggling many projects never bleeds one conversation into another. Each project also keeps its own Claude session id, so switching projects resumes the right context.</p>
+    <div class="eyebrow">The architecture</div>
+    <h2>Layered memory</h2>
+    <p class="lede">Daryan doesn't keep a flat transcript. Memory is four tiers; a turn <strong>ages left&nbsp;→&nbsp;right</strong>, getting more compressed at each step — verbatim turn, then a one-paragraph summary, then a one-line theme. <strong>Core</strong> is the only global tier; the other three are per project, so juggling many projects never bleeds one conversation into another.</p>
 
     <div class="mem">
-      <div class="tierwrap">
-        <div class="tier">
-          <div class="name">Core <span class="scope glob">Global</span></div>
-          <div class="desc">Who you are &amp; how you like to work — the constant facts injected on <em>every</em> project. Never summarized or evicted. <span class="mono">core.json</span></div>
-          <div class="meta"><b>curated</b><span>handful of facts</span></div>
+      <!-- Core band -->
+      <div class="core">
+        <span class="k">CORE</span>
+        <span class="d"><strong style="color:#ffd27a">Global · every project.</strong> Who you are &amp; how you like to work — injected verbatim on every turn. Never summarized or evicted.</span>
+        <span class="b"><b>curated facts</b><span class="mono">core.json</span></span>
+      </div>
+
+      <div class="scopebar"><span class="ln"></span> per&nbsp;project &nbsp;·&nbsp; a turn ages this way → <span class="ln"></span></div>
+
+      <!-- 3 tiers left→right -->
+      <div class="mflow">
+        <div class="mcol">
+          <div class="top"><h4>Recent</h4><span class="cnt">last 20</span></div>
+          <div class="form">full turns — verbatim prompt + reply</div>
+          <div class="stack recent"><i></i><i></i><i></i></div>
+          <div class="file mono">turns/*.json</div>
         </div>
-        <div class="flow">the three tiers below are <b>per&nbsp;project</b> &nbsp;·&nbsp; a turn ages <span class="arr">↓</span> downward as it gets older</div>
-        <div class="tier">
-          <div class="name">Recent <span class="scope proj">Per project</span></div>
-          <div class="desc">The last turns, stored <em>verbatim</em> (full prompt + reply). Compacted <em>only when injected</em>. <span class="mono">turns/*.json</span></div>
-          <div class="meta"><b>last 20</b><span>full fidelity</span></div>
+        <div class="marrow"><span class="a">→</span><span>overflow past 20<br>summarized</span></div>
+        <div class="mcol">
+          <div class="top"><h4>Mid</h4><span class="cnt">20 → 100</span></div>
+          <div class="form">one-paragraph summaries</div>
+          <div class="stack mid"><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="file mono">summaries.json</div>
         </div>
-        <div class="flow"><span class="arr">↓</span> overflow past 20 &nbsp;→&nbsp; summarized to ~1 paragraph</div>
-        <div class="tier">
-          <div class="name">Mid <span class="scope proj">Per project</span></div>
-          <div class="desc">One-paragraph summaries of older turns. <span class="mono">summaries.json</span></div>
-          <div class="meta"><b>~20 → 100</b><span>compressed</span></div>
-        </div>
-        <div class="flow"><span class="arr">↓</span> overflow past ~80 &nbsp;→&nbsp; distilled into themes</div>
-        <div class="tier">
-          <div class="name">Long <span class="scope proj">Per project</span></div>
-          <div class="desc">Durable one-line themes — the gist that survives forever. <span class="mono">themes.json</span></div>
-          <div class="meta"><b>~30 lines</b><span>distilled</span></div>
+        <div class="marrow"><span class="a">→</span><span>overflow past ~80<br>distilled</span></div>
+        <div class="mcol">
+          <div class="top"><h4>Long</h4><span class="cnt">~30 lines</span></div>
+          <div class="form">durable one-line themes</div>
+          <div class="stack long"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="file mono">themes.json</div>
         </div>
       </div>
 
+      <!-- injection -->
       <div class="inject">
         <h4>On every Send</h4>
-        <p>Daryan builds the prompt's memory block as <span class="pill">core</span> + <span class="pill">themes</span> + <span class="pill">summaries</span> + <span class="pill">recent</span>, injects it (on the first turn, after an idle gap, or when the prompt cache has expired — otherwise it leans on <span class="mono">--resume</span>), then runs eviction so the tiers stay within their limits.</p>
+        <p>Daryan assembles the prompt's memory block, injects it (first turn, after an idle gap, or when the prompt cache expired — otherwise it leans on <span class="mono">--resume</span>), then runs eviction so each tier stays within its limit.</p>
+        <div class="build"><span class="chip c">core</span><span class="plus">+</span><span class="chip p">themes</span><span class="plus">+</span><span class="chip p">summaries</span><span class="plus">+</span><span class="chip p">recent</span><span class="eq">→</span><span>prompt</span></div>
       </div>
     </div>
 
     <div class="two" style="margin-top:18px">
-      <div class="card"><div class="ic">✂️</div><h3>Optimization #1 — lean injection</h3>
-        <p>The verbatim recent block was ~80% of per-turn weight. Now each recent turn is compacted <em>at injection time</em> (stored turns stay full, so on-reload history is intact): UI markers stripped, big code blocks truncated to a reference, length capped, prompts clipped.</p></div>
-      <div class="card"><div class="ic">♻️</div><h3>Optimization #2 — free eviction</h3>
-        <p>The voice-first reply already carries a <span class="pill">[[SUMMARY]]</span> recap — a ready-made turn summary. Eviction now <em>reuses</em> it as the mid-tier summary instead of spawning a Haiku call. Only turns without one fall back to the model.</p></div>
+      <div class="card"><div class="ic">✂️</div><h3>Lean injection</h3>
+        <p>The verbatim Recent block was ~80% of per-turn weight. Now each recent turn is compacted <em>at injection time</em> (stored turns stay full, so on-reload history is intact): UI markers stripped, big code blocks truncated to a reference, length capped, prompts clipped.</p></div>
+      <div class="card"><div class="ic">♻️</div><h3>Free eviction</h3>
+        <p>The voice-first reply already carries a <span class="pill">[[SUMMARY]]</span> recap — a ready-made turn summary. Eviction <em>reuses</em> it as the Mid-tier summary instead of spawning a model call; only turns without one fall back.</p></div>
     </div>
   </section>
 
   <!-- SAVINGS -->
   <section>
     <div class="eyebrow">Measured on real stored turns</div>
-    <h2>What it saved</h2>
-    <p class="lede">Reduction in the injected verbatim recent-turn block (the heaviest tier), per project.</p>
+    <h2>What the memory work saved</h2>
+    <p class="lede">Reduction in the injected Recent block (the heaviest tier), per project.</p>
     <div class="bars">
       <div class="bar">
         <h4><span><span class="mono">__workspace__</span></span><em>−62%</em></h4>
         <div class="track"><div class="fill" style="width:38%">23.9k</div></div>
-        <small>63,433 → 23,866 chars · ~9,900 tokens saved per injection · 16 of 20 turns evict with no Haiku call</small>
+        <small>63,433 → 23,866 chars · ~9,900 tokens saved per injection · 16 of 20 turns evict with no model call</small>
       </div>
       <div class="bar">
-        <h4><span><span class="mono">__self__</span> (Daryan editing itself)</span><em>−77%</em></h4>
+        <h4><span><span class="mono">__self__</span></span><em>−77%</em></h4>
         <div class="track"><div class="fill" style="width:23%">9.8k</div></div>
-        <small>42,376 → 9,809 chars · ~8,100 tokens saved per injection · 6 of 7 turns evict with no Haiku call</small>
+        <small>42,376 → 9,809 chars · ~8,100 tokens saved per injection · 6 of 7 turns evict with no model call</small>
       </div>
     </div>
-    <p class="note">Older projects with no <span class="pill">[[SUMMARY]]</span> recaps yet get a smaller cut (~−26%, from artifact truncation only) and still use Haiku for eviction — they improve as new turns accrue.</p>
   </section>
 
-  <!-- LIMITS -->
+  <!-- LIMITS / NEXT -->
   <section>
     <div class="two">
       <div>
         <div class="eyebrow">Known trade-offs</div>
         <h2 style="font-size:21px">Honest limits</h2>
-        <ul class="clean" style="margin-top:14px">
+        <ul class="clean">
           <li>Word-level voice highlight is time-interpolated (Kokoro emits no word timestamps) — it can drift; sentence-level is exact.</li>
           <li>Voice-first home replies collapse to the summary once a stream finishes (full text shows while streaming).</li>
           <li>Injected memory truncates code blocks — the agent re-reads files when it needs verbatim code.</li>
-          <li>The in-app agent edits real files via the CLI (no sandbox); the “Daryan source” scope rule guards against accidental self-edits.</li>
         </ul>
       </div>
       <div>
         <div class="eyebrow">Next</div>
         <h2 style="font-size:21px">Where it goes</h2>
-        <ul class="clean" style="margin-top:14px">
+        <ul class="clean">
           <li><b>Shrink the verbatim window</b> (20 → ~5 turns) — compounds with the compaction already shipped.</li>
           <li><b>Tier core memory per project</b> so cross-project work loads only what's relevant.</li>
-          <li>Validate the memory hygiene over a few real multi-day sessions.</li>
-          <li>Optional: a confirmation guard before the agent writes to its own source.</li>
+          <li>Validate memory hygiene over a few real multi-day sessions.</li>
         </ul>
       </div>
     </div>
@@ -226,7 +249,7 @@
 
   <footer>
     <span>Daryan · build report</span>
-    <span>15+ commits · 59 tests · tsc clean · published private</span>
+    <span>4-tier memory · −77% peak · 59 tests · tsc clean</span>
   </footer>
 </div>
 </body>
