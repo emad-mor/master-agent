@@ -197,6 +197,16 @@ export default function Home() {
     return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
   }, [pickerOpen]);
 
+  // Auto-grow the composer with its content (up to ~5 lines, then it scrolls).
+  // Runs on every text change so typing AND programmatic fills (suggestions,
+  // pick-up, transcription) resize, and it collapses back after send clears it.
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 128) + "px";
+  }, [text]);
+
   const newSession = useCallback(async () => {
     try {
       const r = await fetch("/api/persona/sessions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ project }) });

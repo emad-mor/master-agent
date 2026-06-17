@@ -425,7 +425,7 @@
 /* the floating pill */
 .aria-bar {
   display: flex;
-  align-items: center;
+  align-items: flex-end;        /* grow upward; keep actions pinned to the bottom */
   gap: 8px;
   min-height: 52px;
   padding: 6px 8px 6px 16px;
@@ -455,7 +455,8 @@
   font-family: inherit;
   font-size: 14.5px;
   line-height: 1.45;
-  max-height: 120px;
+  max-height: 128px;            /* ~5 lines; JS grows height to fit then this scrolls */
+  overflow-y: auto;
   padding: 6px 0;
   color: var(--aria-fg);
 }
