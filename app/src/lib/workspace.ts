@@ -168,6 +168,25 @@ export async function readProjectFile(
   return { path: relPath, content, size, truncated, binary: false, tooLarge: false };
 }
 
+/** Resolve a project-relative path to a SAFE absolute path (same traversal
+ *  guards as readProjectFile) for serving the raw bytes — e.g. opening an
+ *  image/audio/video/html file directly in a browser tab. Returns the absolute
+ *  path + size, or an error. Does NOT read the file. */
+export async function resolveProjectFilePath(
+  slug: string | undefined | null,
+  relPath: string,
+): Promise<{ abs: string; size: number } | { error: string }> {
+  const { cwd } = await resolveProject(slug);
+  if (!relPath || isAbsolute(relPath)) return { error: "Invalid path" };
+  const abs = resolve(cwd, relPath);
+  const within = relative(cwd, abs);
+  if (within.startsWith("..") || isAbsolute(within)) return { error: "Path is outside the project" };
+  let st;
+  try { st = await stat(abs); } catch { return { error: "File not found" }; }
+  if (st.isDirectory()) return { error: "Path is a directory" };
+  return { abs, size: st.size };
+}
+
 // ── Dropped-file storage ──
 
 const DROPS_DIR = ".daryan-drops";   // gitignorable folder inside a project

@@ -7,10 +7,20 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Folder, FolderOpen, File as FileIcon, Loader2, RefreshCw, FolderTree, Pin, PinOff, Eye, X, Copy, Check } from "lucide-react";
+import { Folder, FolderOpen, File as FileIcon, Loader2, RefreshCw, FolderTree, Pin, PinOff, Eye, ExternalLink, X, Copy, Check } from "lucide-react";
 import { cx } from "@/lib/format";
 
 type FileNode = { name: string; path: string; dir: boolean; children?: FileNode[] };
+
+// Files the browser can render natively → the view button opens them in a new
+// tab (image/audio/video/html/pdf). Everything else gets the text-preview modal.
+const OPEN_IN_TAB = new Set([
+  ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".avif", ".bmp", ".ico",
+  ".mp3", ".wav", ".ogg", ".oga", ".m4a", ".flac", ".aac", ".opus",
+  ".mp4", ".m4v", ".webm", ".mov", ".mkv", ".ogv",
+  ".html", ".htm", ".pdf",
+]);
+const opensInTab = (name: string) => OPEN_IN_TAB.has(name.slice(name.lastIndexOf(".")).toLowerCase());
 
 export function FileTreeRail({ project, projectName, onPick, onPinnedChange }: {
   project: string;
@@ -28,6 +38,16 @@ export function FileTreeRail({ project, projectName, onPick, onPinnedChange }: {
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const expanded = pinned || hovered;
+
+  // View a file: media (image/audio/video/html/pdf) opens in a new tab so the
+  // browser renders it; everything else opens the in-rail text preview.
+  const view = useCallback((path: string, name: string) => {
+    if (opensInTab(name)) {
+      window.open(`/api/files/raw?project=${encodeURIComponent(project)}&path=${encodeURIComponent(path)}`, "_blank", "noopener,noreferrer");
+    } else {
+      setPreview(path);
+    }
+  }, [project]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -77,7 +97,7 @@ export function FileTreeRail({ project, projectName, onPick, onPinnedChange }: {
             ? <div className="frail__empty"><Loader2 size={13} className="animate-spin" /> Scanning…</div>
             : tree.length === 0
               ? <div className="frail__empty">No files.</div>
-              : tree.map((n) => <TreeNode key={n.path} node={n} depth={0} onPick={onPick} onPreview={setPreview} />)}
+              : tree.map((n) => <TreeNode key={n.path} node={n} depth={0} onPick={onPick} onView={view} />)}
           {truncated && <div className="frail__trunc">…truncated (large project)</div>}
         </div>
       </div>
@@ -89,7 +109,7 @@ export function FileTreeRail({ project, projectName, onPick, onPinnedChange }: {
   );
 }
 
-function TreeNode({ node, depth, onPick, onPreview }: { node: FileNode; depth: number; onPick?: (p: string) => void; onPreview: (p: string) => void }) {
+function TreeNode({ node, depth, onPick, onView }: { node: FileNode; depth: number; onPick?: (p: string) => void; onView: (path: string, name: string) => void }) {
   const [open, setOpen] = useState(depth < 1);
   if (node.dir) {
     return (
@@ -98,24 +118,26 @@ function TreeNode({ node, depth, onPick, onPreview }: { node: FileNode; depth: n
           {open ? <FolderOpen size={13} className="frail__icon frail__icon--dir" /> : <Folder size={13} className="frail__icon frail__icon--dir" />}
           <span className="frail__name">{node.name}</span>
         </button>
-        {open && node.children?.map((c) => <TreeNode key={c.path} node={c} depth={depth + 1} onPick={onPick} onPreview={onPreview} />)}
+        {open && node.children?.map((c) => <TreeNode key={c.path} node={c} depth={depth + 1} onPick={onPick} onView={onView} />)}
       </div>
     );
   }
-  // Row click previews by default; when onPick is wired, the row attaches and the
-  // eye button previews — so both actions are reachable.
+  // Row click attaches (when onPick is wired), else views. The view button opens
+  // media (image/audio/video/html/pdf) in a new tab, other files in the preview.
+  const inTab = opensInTab(node.name);
+  const viewLabel = inTab ? `Open ${node.name} in a new tab` : `Preview ${node.name}`;
   return (
     <div className="frail__filerow" style={{ paddingLeft: 8 + depth * 13 }}>
       <button
         className={cx("frail__row frail__row--file", onPick && "frail__row--pickable")}
-        onClick={() => (onPick ? onPick(node.path) : onPreview(node.path))}
-        title={onPick ? `Attach ${node.path}` : `Preview ${node.path}`}
+        onClick={() => (onPick ? onPick(node.path) : onView(node.path, node.name))}
+        title={onPick ? `Attach ${node.path}` : viewLabel}
       >
         <FileIcon size={12} className="frail__icon" />
         <span className="frail__name">{node.name}</span>
       </button>
-      <button className="frail__peek" onClick={() => onPreview(node.path)} title={`Preview ${node.path}`} aria-label={`Preview ${node.name}`}>
-        <Eye size={12} />
+      <button className="frail__peek" onClick={() => onView(node.path, node.name)} title={viewLabel} aria-label={viewLabel}>
+        {inTab ? <ExternalLink size={12} /> : <Eye size={12} />}
       </button>
     </div>
   );
