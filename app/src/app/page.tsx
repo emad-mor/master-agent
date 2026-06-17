@@ -946,7 +946,10 @@ function AssistantReply({ turn, autoPlay, onPick }: { turn: Turn; autoPlay: bool
   const seekingRef = useRef(false);
   const [scrub, setScrub] = useState<number | null>(null);   // local value while dragging
   const didAutoRef = useRef(false);
-  const activeRef = useRef<HTMLSpanElement | null>(null);
+  const replyRef = useRef<HTMLDivElement | null>(null);      // the rendered (formatted) answer
+  const textMapRef = useRef<{ reply: string; map: TextMap } | null>(null);
+  const ownsHlRef = useRef(false);                            // did THIS instance set the global highlights?
+  const lastIdxRef = useRef(-1);
   const reply = turn.reply;
   const streaming = turn.status === "streaming";
 
@@ -954,32 +957,51 @@ function AssistantReply({ turn, autoPlay, onPick }: { turn: Turn; autoPlay: bool
   useEffect(() => {
     if (autoPlay && !didAutoRef.current && reply.trim()) { didAutoRef.current = true; void play(reply); }
   }, [autoPlay, reply, play]);
-  // Follow the spoken sentence as it advances (scrolls within the transcript).
-  useEffect(() => { activeRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, [activeIndex]);
+
+  const playing = status === "playing";
+  const active = status !== "idle";                 // loading | playing | paused
+  const reading = active && status !== "loading" && activeIndex >= 0 && sentenceList.length > 0;
+
+  // Karaoke ON the formatted answer: paint the spoken sentence + word as CSS
+  // Custom Highlights over the live Markdown DOM — no DOM swap, so all formatting
+  // stays intact. Maps the reader's (markdown-stripped) sentence back to a DOM
+  // text Range; gracefully no-ops if the API is unsupported or the text (e.g. a
+  // code block) doesn't align. Only the instance that set the highlights clears
+  // them (readers are globally exclusive, so just one is reading at a time).
+  useEffect(() => {
+    if (!supportsHighlight()) return;
+    if (!reading || !replyRef.current) {
+      if (ownsHlRef.current) { clearSpokenHighlights(); ownsHlRef.current = false; lastIdxRef.current = -1; }
+      return;
+    }
+    ensureHighlightStyles();
+    if (!textMapRef.current || textMapRef.current.reply !== reply) {
+      textMapRef.current = { reply, map: buildTextMap(replyRef.current) };
+    }
+    const tm = textMapRef.current.map;
+    const ok = applySpokenHighlights(tm, sentenceList, activeIndex, activeFraction);
+    ownsHlRef.current = ok;
+    if (ok && activeIndex !== lastIdxRef.current) {
+      lastIdxRef.current = activeIndex;
+      scrollSentenceIntoView(tm, sentenceList, activeIndex);
+    }
+  }, [reading, reply, sentenceList, activeIndex, activeFraction]);
+
+  // Clear highlights if this instance unmounts mid-read.
+  useEffect(() => () => { if (ownsHlRef.current) clearSpokenHighlights(); }, []);
 
   const fmt = (s: number) => { const m = Math.floor(s / 60); const r = Math.floor(s % 60); return `${m}:${String(r).padStart(2, "0")}`; };
   const cur = scrub ?? currentTime;
-  const playing = status === "playing";
-  const active = status !== "idle";                 // loading | playing | paused
   const hasTimeline = active && status !== "loading" && duration > 0;
-  const reading = active && status !== "loading" && activeIndex >= 0 && sentenceList.length > 0;
 
   return (
     <div className="aria-reply">
-      {/* The answer itself — karaoke-highlighted while reading, Markdown otherwise */}
-      {streaming ? (
-        <div className="md"><Markdown>{stripSuggestions(reply)}</Markdown>{reply && <span className="aria-caret" />}</div>
-      ) : reading ? (
-        <div className="md reply-read">
-          {sentenceList.map((s, i) => (
-            i === activeIndex
-              ? <span key={i} ref={activeRef} className="reply-read__s reply-read__s--on">{renderSpokenWords(s, activeFraction)}{" "}</span>
-              : <span key={i} className="reply-read__s">{s}{" "}</span>
-          ))}
-        </div>
-      ) : (
+      {/* The answer stays fully formatted at all times; the spoken sentence/word
+          is painted over it via CSS Custom Highlights (see the effect above). */}
+      <div ref={replyRef} className="aria-reply__md">
         <Markdown>{stripSuggestions(reply)}</Markdown>
-      )}
+        {streaming && reply && <span className="aria-caret" />}
+      </div>
 
       {/* A multi-agent flow Aria launched from this turn */}
       {turn.flow && (
@@ -1048,18 +1070,131 @@ function AssistantReply({ turn, autoPlay, onPick }: { turn: Turn; autoPlay: bool
   );
 }
 
-// Split the active sentence into word/space tokens and light the word whose
-// character span contains the elapsed-time cursor (fraction × sentence length).
-function renderSpokenWords(sentence: string, fraction: number) {
-  const tokens = sentence.split(/(\s+)/);
-  const cursor = Math.max(0, Math.min(1, fraction)) * (sentence.length || 1);
+// ── Karaoke-over-Markdown via the CSS Custom Highlight API ──
+// We highlight the spoken sentence/word IN PLACE on the rendered (formatted)
+// answer by mapping the reader's plain-text chunk back to a DOM text Range.
+// No DOM mutation — formatting (bold/lists/links/code) stays untouched.
+
+type TextMap = {
+  nodes: { node: Text; start: number; end: number }[];   // each text node's span in `text`
+  norm: string;                                           // whitespace-collapsed, lowercased
+  map: number[];                                          // norm index → original `text` index
+};
+
+// Walk the rendered answer's text nodes into one string + a normalized view.
+function buildTextMap(root: HTMLElement): TextMap {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let text = "";
+  const nodes: TextMap["nodes"] = [];
+  let n: Node | null;
+  while ((n = walker.nextNode())) {
+    const t = (n as Text).nodeValue || "";
+    if (!t) continue;
+    nodes.push({ node: n as Text, start: text.length, end: text.length + t.length });
+    text += t;
+  }
+  let norm = "";
+  const map: number[] = [];
+  let prevSpace = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (/\s/.test(c)) { if (prevSpace) continue; norm += " "; map.push(i); prevSpace = true; }
+    else { norm += c.toLowerCase(); map.push(i); prevSpace = false; }
+  }
+  return { nodes, norm, map };
+}
+
+const normChunk = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
+
+// Locate the activeIndex-th spoken chunk inside the DOM text → original char span.
+function locateSentence(tm: TextMap, sentences: string[], idx: number): { start: number; end: number; normStart: number } | null {
+  const target = normChunk(sentences[idx] ?? "");
+  if (!target) return null;
+  let hint = 0;                                  // search near where prior chunks end (handles repeats/seeks)
+  for (let i = 0; i < idx; i++) hint += normChunk(sentences[i] ?? "").length + 1;
+  hint = Math.max(0, Math.min(hint - 40, tm.norm.length));
+  let pos = tm.norm.indexOf(target, hint);
+  if (pos < 0) pos = tm.norm.indexOf(target);    // fallback: anywhere
+  if (pos < 0) return null;
+  const start = tm.map[pos];
+  const end = tm.map[Math.min(pos + target.length - 1, tm.map.length - 1)] + 1;
+  return { start, end, normStart: pos };
+}
+
+// The active word's [start,end) within the normalized chunk (time-interpolated).
+// Returns the LAST word whose start has passed the cursor, so a word stays lit
+// through the space before the next one begins (no flicker between words).
+function activeWordSpan(norm: string, fraction: number): { s: number; e: number } | null {
+  const cursor = Math.max(0, Math.min(1, fraction)) * (norm.length || 1);
   let pos = 0;
-  return tokens.map((tok, j) => {
+  let best: { s: number; e: number } | null = null;
+  for (const tok of norm.split(/(\s+)/)) {
     const start = pos; pos += tok.length;
-    const isSpace = /^\s+$/.test(tok);
-    // Inclusive upper bound on the final token so the last word stays lit at
-    // fraction 1.0 (otherwise it un-highlights for a beat at the sentence end).
-    const on = !isSpace && cursor >= start && (cursor < pos || pos >= sentence.length);
-    return on ? <span key={j} className="reply-read__w--on">{tok}</span> : <span key={j}>{tok}</span>;
-  });
+    if (/^\s+$/.test(tok) || !tok) continue;
+    if (start <= cursor) best = { s: start, e: pos };   // last word that has started
+    else break;                                          // tokens are in order
+  }
+  return best;
+}
+
+function rangeFromOffsets(tm: TextMap, start: number, end: number): Range | null {
+  if (start == null || end == null || end <= start) return null;
+  const r = document.createRange();
+  let setS = false, setE = false;
+  for (const seg of tm.nodes) {
+    if (!setS && start >= seg.start && start < seg.end) { r.setStart(seg.node, start - seg.start); setS = true; }
+    if (end > seg.start && end <= seg.end) { r.setEnd(seg.node, end - seg.start); setE = true; break; }
+  }
+  return setS && setE ? r : null;
+}
+
+// The ::highlight() pseudo styles are injected at runtime — the build-time CSS
+// parser rejects ::highlight(), but the browser understands it fine. Pseudos
+// only allow color/background-color/text-decoration/text-shadow.
+let highlightStylesInjected = false;
+function ensureHighlightStyles() {
+  if (highlightStylesInjected || typeof document === "undefined") return;
+  highlightStylesInjected = true;
+  const el = document.createElement("style");
+  el.setAttribute("data-daryan-highlights", "");
+  el.textContent =
+    "::highlight(daryan-spoken-sentence){background-color:rgba(124,44,255,0.18);}" +
+    "::highlight(daryan-spoken-word){background-color:#8c3cff;color:#fff;text-shadow:0 1px 6px rgba(124,44,255,0.55);}";
+  document.head.appendChild(el);
+}
+
+type HighlightCtor = new (...ranges: Range[]) => unknown;
+type HighlightRegistry = { set(name: string, h: unknown): void; delete(name: string): void };
+const highlightRegistry = (): HighlightRegistry | null =>
+  (typeof CSS !== "undefined" && (CSS as unknown as { highlights?: HighlightRegistry }).highlights) || null;
+function supportsHighlight(): boolean {
+  return typeof window !== "undefined" && "Highlight" in window && !!highlightRegistry();
+}
+function setHighlight(name: string, range: Range) {
+  try {
+    const H = (window as unknown as { Highlight: HighlightCtor }).Highlight;
+    highlightRegistry()?.set(name, new H(range));
+  } catch {}
+}
+const clearHighlight = (name: string) => { try { highlightRegistry()?.delete(name); } catch {} };
+const clearSpokenHighlights = () => { clearHighlight("daryan-spoken-sentence"); clearHighlight("daryan-spoken-word"); };
+
+// Paint sentence + word highlights for the current spoken position. Returns
+// false (and clears) if the chunk can't be mapped onto the DOM.
+function applySpokenHighlights(tm: TextMap, sentences: string[], idx: number, fraction: number): boolean {
+  const loc = locateSentence(tm, sentences, idx);
+  const sentRange = loc && rangeFromOffsets(tm, loc.start, loc.end);
+  if (!loc || !sentRange) { clearSpokenHighlights(); return false; }
+  setHighlight("daryan-spoken-sentence", sentRange);
+  const w = activeWordSpan(normChunk(sentences[idx] ?? ""), fraction);
+  const wr = w && rangeFromOffsets(tm, tm.map[loc.normStart + w.s], tm.map[Math.min(loc.normStart + w.e - 1, tm.map.length - 1)] + 1);
+  if (wr) setHighlight("daryan-spoken-word", wr); else clearHighlight("daryan-spoken-word");
+  return true;
+}
+
+function scrollSentenceIntoView(tm: TextMap, sentences: string[], idx: number) {
+  const loc = locateSentence(tm, sentences, idx);
+  if (!loc) return;
+  const r = rangeFromOffsets(tm, loc.start, Math.min(loc.end, loc.start + 1));
+  r?.startContainer.parentElement?.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }

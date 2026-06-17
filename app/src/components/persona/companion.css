@@ -1717,18 +1717,9 @@
 .reply-voice { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; opacity: 0.75; transition: opacity .15s; }
 .aria-reply:hover .reply-voice { opacity: 1; }
 
-/* Karaoke ON THE ANSWER: while reading, the reply renders as its spoken
-   sentences — past/future dimmed, the active sentence lit, the active word
-   highlighted. Word timing is interpolated (Kokoro emits no timestamps). */
-.reply-read { white-space: pre-wrap; }
-.reply-read__s { color: var(--aria-fg-faint); transition: color .25s ease; }
-.reply-read__s--on { color: var(--aria-fg); }
-.reply-read__w--on {
-  color: #fff; font-weight: 600;
-  background: linear-gradient(100deg, #8c3cff, #c42b8a);
-  border-radius: 5px; padding: 1px 3px; margin: 0 -1px;
-  box-shadow: 0 1px 8px rgba(124,44,255,0.4);
-}
+/* Karaoke-over-Markdown styles use the CSS Custom Highlight API (::highlight()),
+   which the bundler's CSS parser rejects — so those rules are injected at runtime
+   from page.tsx (ensureHighlightStyles) instead of living here. */
 .reply-voice__btn {
   display: inline-flex; align-items: center; gap: 5px;
   height: 26px; padding: 0 9px; border-radius: 999px;
