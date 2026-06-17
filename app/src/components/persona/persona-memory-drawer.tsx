@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Brain, X, Trash2, Loader2, RefreshCw, Pin, Plus, Pencil, Check, Globe, Tag, ChevronDown, ChevronRight } from "lucide-react";
+import { Brain, X, Trash2, Loader2, RefreshCw, Pin, Plus, Pencil, Check, Globe, Tag, ChevronDown, ChevronRight, RotateCcw, AlertTriangle } from "lucide-react";
 import { cx } from "@/lib/format";
 import "./companion.css";
 
@@ -48,6 +48,12 @@ export function PersonaMemoryDrawer({ open, onClose, refreshKey, project, projec
   const [filter, setFilter] = useState("All");           // active category filter (per the current tab)
   // Reset the category filter to All when switching tabs (categories differ per tier).
   useEffect(() => { setFilter("All"); }, [tab]);
+  // Hard-reset (type-to-confirm) modal state.
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetText, setResetText] = useState("");
+  const [resetting, setResetting] = useState(false);
+  const CONFIRM_PHRASE = "reset memory";
+  const canReset = resetText.trim().toLowerCase() === CONFIRM_PHRASE;
 
   const q = `project=${encodeURIComponent(project)}`;
 
@@ -140,6 +146,18 @@ export function PersonaMemoryDrawer({ open, onClose, refreshKey, project, projec
     await load();
   }, [q, projectName, load]);
 
+  // HARD reset: wipe ALL memory (every project + global core). Type-to-confirm
+  // gated. On success, reload so the whole app (sessions, turns) starts fresh.
+  const hardReset = useCallback(async () => {
+    if (!canReset || resetting) return;
+    setResetting(true);
+    try {
+      const r = await fetch(`/api/persona/memory?hardReset=1`, { method: "DELETE" });
+      if (r.ok) { window.location.reload(); return; }
+      setResetting(false);
+    } catch { setResetting(false); }
+  }, [canReset, resetting]);
+
   if (!open) return null;
 
   const TABS = [
@@ -183,6 +201,9 @@ export function PersonaMemoryDrawer({ open, onClose, refreshKey, project, projec
             </button>
             <button className="aria-iconbtn" onClick={wipeAll} title={`Wipe ${projectName}'s conversational memory`} aria-label="Wipe project memory" style={{ color: "#ff9d9d" }}>
               <Trash2 size={14} />
+            </button>
+            <button className="aria-iconbtn" onClick={() => { setResetText(""); setResetOpen(true); }} title="Hard reset ALL memory — every project + core (type-to-confirm)" aria-label="Hard reset all memory" style={{ color: "#ff6b6b" }}>
+              <RotateCcw size={14} />
             </button>
             <button className="aria-iconbtn" onClick={onClose} aria-label="Close memory"><X size={16} /></button>
           </div>
@@ -332,6 +353,37 @@ export function PersonaMemoryDrawer({ open, onClose, refreshKey, project, projec
           </div>
         </div>
       </div>
+
+      {/* Hard-reset confirm — type the phrase to enable the destructive action */}
+      {resetOpen && (
+        <div className="aria-backdrop" style={{ zIndex: 95, display: "grid", placeItems: "center", padding: 24 }} onClick={() => !resetting && setResetOpen(false)}>
+          <div role="dialog" aria-label="Hard reset memory" onClick={(e) => e.stopPropagation()}
+               style={{ width: "min(440px,100%)", borderRadius: 16, border: "1px solid rgba(255,107,107,.4)", background: "rgba(20,13,31,.97)", boxShadow: "0 30px 90px rgba(0,0,0,.6)", padding: 22 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 10 }}>
+              <AlertTriangle size={18} style={{ color: "#ff6b6b", flexShrink: 0 }} />
+              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "var(--aria-fg)" }}>Hard reset memory</h3>
+            </div>
+            <p style={{ margin: "0 0 14px", fontSize: 13.5, lineHeight: 1.55, color: "var(--aria-fg-dim)" }}>
+              This wipes <b>all</b> of Daryan&apos;s memory — every project&apos;s recent turns, summaries, themes and sessions, <b>and</b> the global core facts. Daryan starts completely fresh. This <b>cannot be undone</b>.
+            </p>
+            <label style={{ display: "block", fontSize: 12, color: "var(--aria-fg-faint)", marginBottom: 6 }}>
+              Type <span style={{ fontFamily: "var(--font-mono)", color: "#ff8a8a", fontWeight: 600 }}>reset memory</span> to confirm
+            </label>
+            <input className="tk-input" autoFocus value={resetText} disabled={resetting}
+                   onChange={(e) => setResetText(e.target.value)}
+                   onKeyDown={(e) => { if (e.key === "Enter" && canReset) void hardReset(); if (e.key === "Escape") setResetOpen(false); }}
+                   placeholder="reset memory"
+                   style={{ width: "100%", padding: "9px 11px", borderRadius: 10, fontFamily: "var(--font-mono)", border: `1px solid ${canReset ? "rgba(255,107,107,.7)" : "var(--aria-stroke-strong)"}`, background: "var(--aria-fill)", color: "var(--aria-fg)", outline: "none" }} />
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+              <button className="aria-mem__btn" onClick={() => setResetOpen(false)} disabled={resetting}>Cancel</button>
+              <button onClick={() => void hardReset()} disabled={!canReset || resetting}
+                      style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 9, fontSize: 12.5, fontWeight: 600, border: "1px solid transparent", color: "#fff", cursor: canReset && !resetting ? "pointer" : "not-allowed", opacity: canReset && !resetting ? 1 : 0.5, background: "linear-gradient(135deg,#e0453c,#b3261e)" }}>
+                {resetting ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />} Reset memory
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -19,7 +19,7 @@
  * Storage is plain JSON under app/data/memory/ — easy to inspect, edit, wipe.
  * Gitignored. */
 
-import { mkdir, readFile, writeFile, rename, readdir, unlink, stat } from "node:fs/promises";
+import { mkdir, readFile, writeFile, rename, readdir, unlink, stat, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { spawn } from "node:child_process";
@@ -210,6 +210,14 @@ export async function clearAll(key: string): Promise<void> {
   for (const p of [summariesFile(key), themesFile(key), sessionFile(key)]) {
     if (existsSync(p)) await unlink(p);
   }
+}
+
+/** HARD RESET — wipe ALL memory: every project's turns/summaries/themes/sessions
+ *  AND the global core facts. Daryan starts completely fresh; core re-seeds on
+ *  the next access. Destructive and irreversible — gate it behind a typed
+ *  confirmation in the UI. Does NOT touch agents/flows (only memory/). */
+export async function hardResetMemory(): Promise<void> {
+  await rm(ROOT, { recursive: true, force: true });
 }
 
 // ────────────────────────────────────────────────────────────────────────────

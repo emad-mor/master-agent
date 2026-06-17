@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   addCore, clearAll, deleteTurn, listCore, listSummaries, listThemes, listTurns,
-  memoryStats, removeCore, updateCore, setTurnCategory,
+  memoryStats, removeCore, updateCore, setTurnCategory, hardResetMemory,
 } from "@/lib/persona-memory";
 import { resolveProject } from "@/lib/workspace";
 
@@ -60,6 +60,14 @@ export async function PATCH(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   const url = new URL(req.url);
+
+  // Global HARD RESET — wipes ALL memory (every project + global core). Gated in
+  // the UI behind a typed "reset memory" confirmation. No project needed.
+  if (url.searchParams.get("hardReset") === "1") {
+    await hardResetMemory();
+    return NextResponse.json({ ok: true, cleared: "hard-reset" });
+  }
+
   const { key } = await resolveProject(url.searchParams.get("project"));
 
   if (url.searchParams.get("all") === "1") {
