@@ -68,6 +68,40 @@ describe("shouldMemorizeFlow", () => {
     expect(g.totalTokens).toBe(0);
     expect(g.ok).toBe(false);
   });
+
+  it("counts only `done` steps toward the step floor (`stopped` is excluded)", () => {
+    const g = shouldMemorizeFlow([
+      step({ status: "done", tokens: tok(5000, 5000) }),
+      step({ status: "stopped", tokens: tok(5000, 5000) }),
+    ]);
+    expect(g.successCount).toBe(1);
+    expect(g.ok).toBe(false);              // only 1 successful step, below MIN_STEPS=2
+    expect(g.totalTokens).toBe(10000);     // stopped step's tokens excluded
+  });
+
+  it("memorizes at the exact 2-done boundary when a 3rd step is error/stopped", () => {
+    // 3 steps, but only the 2 `done` ones count — and they just clear a floor.
+    const g = shouldMemorizeFlow([
+      step({ status: "done", costUsd: 0.015 }),
+      step({ status: "done", costUsd: 0.01 }),
+      step({ status: "error", costUsd: 10 }),
+      step({ status: "stopped", costUsd: 10 }),
+    ]);
+    expect(g.successCount).toBe(2);        // exactly at MIN_STEPS=2
+    expect(g.totalCostUsd).toBeCloseTo(0.025); // error/stopped cost excluded
+    expect(g.ok).toBe(true);
+  });
+
+  it("gates at exactly 2 done steps when neither floor is cleared", () => {
+    const g = shouldMemorizeFlow([
+      step({ status: "done", tokens: tok(100, 100) }),
+      step({ status: "done", tokens: tok(100, 100) }),
+    ]);
+    expect(g.successCount).toBe(2);        // step floor met
+    expect(g.totalTokens).toBe(400);       // but below the 8000 token floor
+    expect(g.totalCostUsd).toBe(0);        // and below the cost floor
+    expect(g.ok).toBe(false);
+  });
 });
 
 describe("normalizeForDedup", () => {
