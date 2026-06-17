@@ -778,53 +778,7 @@ export default function Home() {
                     </div>
                   )}
                   {(t.reply || t.status === "streaming") && (
-                    <div className="aria-reply">
-                      <Markdown>{stripSuggestions(t.reply)}</Markdown>
-                      {t.status === "streaming" && t.reply && <span className="aria-caret" />}
-                      {/* A multi-agent flow Aria launched from this turn */}
-                      {t.flow && (
-                        t.flow.error
-                          ? <div className="aria-err" style={{ marginTop: 8 }}><AlertCircle size={12} style={{ marginTop: 1, flexShrink: 0 }} /><span>{t.flow.error}</span></div>
-                          : (
-                            <a className="reply-flow" href="/tasks" title="Open Mission Control to watch the flow run">
-                              <GitBranch size={13} />
-                              <span className="reply-flow__label">Flow launched{t.flow.stepCount ? ` · ${t.flow.stepCount} steps` : ""}</span>
-                              <span className="reply-flow__goal">{t.flow.goal}</span>
-                              <ArrowRight size={12} />
-                            </a>
-                          )
-                      )}
-                      {/* Clickable next-step suggestions parsed from the reply.
-                          Each card shows the short label AND the full prompt it
-                          will run, so it's clear what each one does at a glance. */}
-                      {t.status !== "streaming" && (t.suggestions?.length ?? 0) > 0 && (
-                        <div className="reply-next">
-                          <span className="reply-next__label">Next steps</span>
-                          <div className="reply-next__chips">
-                            {t.suggestions!.map((s, i) => (
-                              <button
-                                key={i}
-                                className="reply-next__chip"
-                                title={`Run: ${s.prompt}`}
-                                onClick={() => { setText(s.prompt); inputRef.current?.focus(); }}
-                              >
-                                <span className="reply-next__head">
-                                  <span className="reply-next__title">{s.label}</span>
-                                  <ArrowRight size={13} />
-                                </span>
-                                <span className="reply-next__desc">{s.prompt}</span>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      {t.reply && t.status !== "streaming" && (
-                        // Streaming "Listen" — starts after the first sentence
-                        // synthesizes, so even a long flow-handoff summary plays
-                        // back quickly. Markers are stripped inside the reader.
-                        <ReplyVoice text={t.reply} autoPlay={t.id === autoPlayTurnId} />
-                      )}
-                    </div>
+                    <AssistantReply turn={t} autoPlay={t.id === autoPlayTurnId} onPick={(p) => { setText(p); inputRef.current?.focus(); }} />
                   )}
                   {t.status === "error" && (
                     <div className="aria-err">
@@ -961,89 +915,115 @@ function formatAgo(ts: number): string {
   return `${Math.floor(diff / 86400_000)}d ago`;
 }
 
-// Per-reply audio player with a SCRUBBABLE TIMELINE — the single TTS engine for
-// replies. On "Listen" (or auto-play when Voice is on) it STREAMS the reply
-// sentence-by-sentence via useReader, so audio starts after the first sentence
-// is synthesized instead of waiting for the whole reply. Action markers
-// ([[NEXT]]/[[FLOW]]/[[ASK]]) are stripped inside the reader, never read aloud.
-// Readers are globally exclusive, so the controls you see ALWAYS drive the audio
-// you hear — auto-play and a manual Listen can never overlap.
-function ReplyVoice({ text, autoPlay = false }: { text: string; autoPlay?: boolean }) {
+// One assistant reply: the rendered answer + flow link + next-step cards + the
+// voice controls, all sharing a SINGLE useReader so the karaoke highlight paints
+// on the ANSWER TEXT itself (not a separate caption). While reading, the reply
+// renders as its spoken sentences with the active sentence + word lit up; idle,
+// it renders normal Markdown. Action markers are stripped inside the reader, and
+// readers are globally exclusive so auto-play and a manual Listen never overlap.
+function AssistantReply({ turn, autoPlay, onPick }: { turn: Turn; autoPlay: boolean; onPick: (prompt: string) => void }) {
   const { status, currentTime, duration, buffering, sentenceList, activeIndex, activeFraction, play, pause, resume, stop, seek } = useReader();
   const seekingRef = useRef(false);
   const [scrub, setScrub] = useState<number | null>(null);   // local value while dragging
+  const didAutoRef = useRef(false);
+  const activeRef = useRef<HTMLSpanElement | null>(null);
+  const reply = turn.reply;
+  const streaming = turn.status === "streaming";
 
   // Auto-play exactly once when this reply is tagged (Voice on + just finished).
-  const didAutoRef = useRef(false);
   useEffect(() => {
-    if (autoPlay && !didAutoRef.current && text.trim()) { didAutoRef.current = true; void play(text); }
-  }, [autoPlay, text, play]);
+    if (autoPlay && !didAutoRef.current && reply.trim()) { didAutoRef.current = true; void play(reply); }
+  }, [autoPlay, reply, play]);
+  // Follow the spoken sentence as it advances (scrolls within the transcript).
+  useEffect(() => { activeRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, [activeIndex]);
 
   const fmt = (s: number) => { const m = Math.floor(s / 60); const r = Math.floor(s % 60); return `${m}:${String(r).padStart(2, "0")}`; };
   const cur = scrub ?? currentTime;
-  const dur = duration;
   const playing = status === "playing";
   const active = status !== "idle";                 // loading | playing | paused
-  const hasTimeline = active && status !== "loading" && dur > 0;
-  const showCaption = active && status !== "loading" && activeIndex >= 0 && sentenceList.length > 0;
+  const hasTimeline = active && status !== "loading" && duration > 0;
+  const reading = active && status !== "loading" && activeIndex >= 0 && sentenceList.length > 0;
 
   return (
-   <div className="reply-voicewrap">
-    <div className="reply-voice">
-      {!active ? (
-        <button className="reply-voice__btn" onClick={() => void play(text)} title="Read aloud">
-          <Volume2 size={13} /> Listen
-        </button>
-      ) : status === "loading" ? (
-        <span className="reply-voice__btn reply-voice__btn--on"><Loader2 size={13} className="animate-spin" /> Synthesizing…</span>
+    <div className="aria-reply">
+      {/* The answer itself — karaoke-highlighted while reading, Markdown otherwise */}
+      {streaming ? (
+        <div className="md"><Markdown>{stripSuggestions(reply)}</Markdown>{reply && <span className="aria-caret" />}</div>
+      ) : reading ? (
+        <div className="md reply-read">
+          {sentenceList.map((s, i) => (
+            i === activeIndex
+              ? <span key={i} ref={activeRef} className="reply-read__s reply-read__s--on">{renderSpokenWords(s, activeFraction)}{" "}</span>
+              : <span key={i} className="reply-read__s">{s}{" "}</span>
+          ))}
+        </div>
       ) : (
-        <>
-          {playing
-            ? <button className="reply-voice__btn reply-voice__btn--on" onClick={pause} title="Pause"><Pause size={13} /></button>
-            : <button className="reply-voice__btn reply-voice__btn--on" onClick={resume} title="Play"><Play size={13} fill="currentColor" /></button>}
-          <button className="reply-voice__btn" onClick={stop} title="Stop"><Square size={11} fill="currentColor" /></button>
-          {hasTimeline ? (
-            <div className="reply-voice__timeline">
-              <span className="reply-voice__time">{fmt(cur)}</span>
-              <input
-                className="reply-voice__scrub"
-                type="range" min={0} max={Math.max(dur, 0.1)} step={0.05} value={Math.min(cur, dur)}
-                onMouseDown={() => { seekingRef.current = true; }}
-                onMouseUp={() => { seekingRef.current = false; if (scrub != null) { seek(scrub); setScrub(null); } }}
-                onChange={(e) => { const v = parseFloat(e.target.value); setScrub(v); if (!seekingRef.current) { seek(v); setScrub(null); } }}
-                style={{ ["--pct" as string]: `${dur ? (cur / dur) * 100 : 0}%` }}
-                aria-label="Seek"
-              />
-              <span className="reply-voice__time">{fmt(dur)}{buffering && "…"}</span>
-            </div>
-          ) : (
-            <span className="reply-voice__wave" aria-hidden><i /><i /><i /></span>
-          )}
-        </>
+        <Markdown>{stripSuggestions(reply)}</Markdown>
       )}
-    </div>
-    {showCaption && <SpokenCaption sentences={sentenceList} activeIndex={activeIndex} fraction={activeFraction} />}
-   </div>
-  );
-}
 
-// Karaoke caption: shows the plain-text spoken sentences, highlights the one
-// currently playing, and within it approximates the spoken WORD from elapsed
-// time (Kokoro emits no word timestamps, so this is an interpolation — it can
-// drift slightly). The active sentence auto-scrolls into view for long replies.
-function SpokenCaption({ sentences, activeIndex, fraction }: { sentences: string[]; activeIndex: number; fraction: number }) {
-  const activeRef = useRef<HTMLSpanElement | null>(null);
-  useEffect(() => { activeRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, [activeIndex]);
-  return (
-    <div className="reply-cap" aria-hidden>
-      <span className="reply-cap__icon"><Volume2 size={12} /></span>
-      <div className="reply-cap__text">
-        {sentences.map((s, i) => (
-          i === activeIndex
-            ? <span key={i} ref={activeRef} className="reply-cap__s reply-cap__s--on">{renderSpokenWords(s, fraction)}{" "}</span>
-            : <span key={i} className="reply-cap__s">{s}{" "}</span>
-        ))}
-      </div>
+      {/* A multi-agent flow Aria launched from this turn */}
+      {turn.flow && (
+        turn.flow.error
+          ? <div className="aria-err" style={{ marginTop: 8 }}><AlertCircle size={12} style={{ marginTop: 1, flexShrink: 0 }} /><span>{turn.flow.error}</span></div>
+          : (
+            <a className="reply-flow" href="/tasks" title="Open Mission Control to watch the flow run">
+              <GitBranch size={13} />
+              <span className="reply-flow__label">Flow launched{turn.flow.stepCount ? ` · ${turn.flow.stepCount} steps` : ""}</span>
+              <span className="reply-flow__goal">{turn.flow.goal}</span>
+              <ArrowRight size={12} />
+            </a>
+          )
+      )}
+
+      {/* Clickable next-step suggestions — title + full prompt */}
+      {!streaming && (turn.suggestions?.length ?? 0) > 0 && (
+        <div className="reply-next">
+          <span className="reply-next__label">Next steps</span>
+          <div className="reply-next__chips">
+            {turn.suggestions!.map((s, i) => (
+              <button key={i} className="reply-next__chip" title={`Run: ${s.prompt}`} onClick={() => onPick(s.prompt)}>
+                <span className="reply-next__head"><span className="reply-next__title">{s.label}</span><ArrowRight size={13} /></span>
+                <span className="reply-next__desc">{s.prompt}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Voice controls — Listen / synthesizing / play-pause-stop + scrub timeline */}
+      {reply && !streaming && (
+        <div className="reply-voice">
+          {!active ? (
+            <button className="reply-voice__btn" onClick={() => void play(reply)} title="Read aloud"><Volume2 size={13} /> Listen</button>
+          ) : status === "loading" ? (
+            <span className="reply-voice__btn reply-voice__btn--on"><Loader2 size={13} className="animate-spin" /> Synthesizing…</span>
+          ) : (
+            <>
+              {playing
+                ? <button className="reply-voice__btn reply-voice__btn--on" onClick={pause} title="Pause"><Pause size={13} /></button>
+                : <button className="reply-voice__btn reply-voice__btn--on" onClick={resume} title="Play"><Play size={13} fill="currentColor" /></button>}
+              <button className="reply-voice__btn" onClick={stop} title="Stop"><Square size={11} fill="currentColor" /></button>
+              {hasTimeline ? (
+                <div className="reply-voice__timeline">
+                  <span className="reply-voice__time">{fmt(cur)}</span>
+                  <input
+                    className="reply-voice__scrub"
+                    type="range" min={0} max={Math.max(duration, 0.1)} step={0.05} value={Math.min(cur, duration)}
+                    onMouseDown={() => { seekingRef.current = true; }}
+                    onMouseUp={() => { seekingRef.current = false; if (scrub != null) { seek(scrub); setScrub(null); } }}
+                    onChange={(e) => { const v = parseFloat(e.target.value); setScrub(v); if (!seekingRef.current) { seek(v); setScrub(null); } }}
+                    style={{ ["--pct" as string]: `${duration ? (cur / duration) * 100 : 0}%` }}
+                    aria-label="Seek"
+                  />
+                  <span className="reply-voice__time">{fmt(duration)}{buffering && "…"}</span>
+                </div>
+              ) : (
+                <span className="reply-voice__wave" aria-hidden><i /><i /><i /></span>
+              )}
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -1060,6 +1040,6 @@ function renderSpokenWords(sentence: string, fraction: number) {
     // Inclusive upper bound on the final token so the last word stays lit at
     // fraction 1.0 (otherwise it un-highlights for a beat at the sentence end).
     const on = !isSpace && cursor >= start && (cursor < pos || pos >= sentence.length);
-    return on ? <span key={j} className="reply-cap__w--on">{tok}</span> : <span key={j}>{tok}</span>;
+    return on ? <span key={j} className="reply-read__w--on">{tok}</span> : <span key={j}>{tok}</span>;
   });
 }
