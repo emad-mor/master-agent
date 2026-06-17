@@ -94,7 +94,7 @@ export async function fileTree(slug: string | undefined | null, opts?: { maxDept
     entries.sort((a, b) => (a.isDirectory() === b.isDirectory() ? a.name.localeCompare(b.name) : a.isDirectory() ? -1 : 1));
     const nodes: FileNode[] = [];
     for (const e of entries) {
-      if (e.name.startsWith(".") && e.name !== ".aria-drops") continue;   // hide dotfiles (except our drops)
+      if (e.name.startsWith(".") && e.name !== DROPS_DIR) continue;   // hide dotfiles (except our drops)
       if (TREE_IGNORE.has(e.name)) continue;
       if (count >= maxEntries) { truncated = true; break; }
       count++;
@@ -170,9 +170,9 @@ export async function readProjectFile(
 
 // ── Dropped-file storage ──
 
-const DROPS_DIR = ".aria-drops";   // gitignorable folder inside a project
+const DROPS_DIR = ".daryan-drops";   // gitignorable folder inside a project
 
-/** Save dropped files into <project>/.aria-drops/ and return their relative
+/** Save dropped files into <project>/.daryan-drops/ and return their relative
  *  paths (for referencing in a prompt). Filenames are sanitized + uuid-prefixed
  *  to avoid collisions and path traversal. */
 export async function saveDrops(slug: string | undefined | null, files: { name: string; data: Buffer }[]): Promise<{ relPath: string; name: string }[]> {

@@ -115,7 +115,7 @@ export default function Home() {
   const [autoPlayTurnId, setAutoPlayTurnId] = useState<number | null>(null);
 
   // ── Attachments (any dropped file: image / text / doc) ──
-  // Saved server-side into the project's .aria-drops/ and referenced by path so
+  // Saved server-side into the project's .daryan-drops/ and referenced by path so
   // Claude reads them with its tools.
   const [attachments, setAttachments] = useState<{ relPath: string; name: string }[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -149,7 +149,7 @@ export default function Home() {
     ? "Daryan source"
     : projects.find((p) => p.slug === project)?.name ?? project;
 
-  // ── Upload dropped/picked files to the active project's .aria-drops ──
+  // ── Upload dropped/picked files to the active project's .daryan-drops ──
   const uploadFiles = useCallback(async (files: FileList | File[]) => {
     const arr = Array.from(files).slice(0, 8);
     if (arr.length === 0) return;

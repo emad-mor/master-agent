@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { saveDrops } from "@/lib/workspace";
 
-/* Save dropped files (images / text / docs) into <project>/.aria-drops/ so the
+/* Save dropped files (images / text / docs) into <project>/.daryan-drops/ so the
  * agent can read them by path. Accepts multipart/form-data with field "files"
  * (one or many) and an optional "project" field.
  *   POST /api/drops  (FormData: files[], project) → { saved: [{relPath, name}] } */

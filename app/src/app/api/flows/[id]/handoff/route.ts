@@ -7,7 +7,7 @@ import { createSession, appendTurn, evictIfNeeded } from "@/lib/persona-memory";
  * research into the conversation (which would ride the Recent memory window
  * verbatim and bloat every later turn). Instead:
  *   1. Write a FULL export .md (the ask, per-step chain analysis, and the
- *      complete final conclusion) to the project's .aria-drops/ folder.
+ *      complete final conclusion) to the project's .daryan-drops/ folder.
  *   2. Distill a compact summary (Haiku) of the ask + research + chain + the
  *      key conclusion.
  *   3. Seed a new session turn with the SUMMARY plus a file reference, so Aria
@@ -66,7 +66,7 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
   doc.push(``, `## Final conclusion`, ``, stripMarkers(conclusion.reply));
   const fullDoc = doc.join("\n");
 
-  // ── 2. Write the full doc to .aria-drops/ (before distillation so the
+  // ── 2. Write the full doc to .daryan-drops/ (before distillation so the
   //        summary + fallback next-steps can reference its path) ──
   const stamp = String(flow.createdAt || 0);   // stable, no Date.now() here
   const fname = `flow-${flow.name.replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "research"}-${stamp.slice(-6)}.md`;
