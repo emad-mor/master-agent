@@ -3,11 +3,12 @@
 // Connected repositories as a DOCKED RIGHT RAIL — mirror of the left file rail.
 // Collapsed to a thin strip; expands on hover; a pin keeps it open and pushes
 // content left. Lists Daryan's own source + every workspace project with its
-// live git state (branch, last commit, dirty count, ahead/behind). Refresh
-// re-reads git on demand.
+// live git state (branch, last commit, dirty count, ahead/behind), plus
+// friendly "git for humans" buttons: each drops a ready-to-send prompt into the
+// chat so Daryan does the actual git work (and you can review it first).
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { GitBranch, Loader2, RefreshCw, Pin, PinOff, AlertCircle } from "lucide-react";
+import { GitBranch, Loader2, RefreshCw, Pin, PinOff, AlertCircle, Save, Download, Upload, FileText } from "lucide-react";
 import { cx } from "@/lib/format";
 
 type RepoState = {
@@ -16,9 +17,23 @@ type RepoState = {
   dirty?: number; ahead?: number; behind?: number; hasUpstream?: boolean; error?: string;
 };
 
-export function ReposRail({ refreshKey, onPinnedChange }: {
+// Plain-English prompts the buttons drop into the composer. Each names the repo
+// AND its path so Daryan acts on the right one regardless of the active project.
+function prompts(name: string, path: string) {
+  const it = `the "${name}" repo (${path})`;
+  return {
+    save:    `Commit my changes in ${it}: stage everything and write a clear, descriptive commit message.`,
+    update:  `Update ${it}: pull the latest changes from its remote, then tell me in plain English what changed.`,
+    upload:  `Push ${it} to its remote on GitHub. If it has no remote set up yet, tell me what's needed.`,
+    changes: `In plain English, summarize what has changed in ${it} since its last commit.`,
+    init:    `Set up version control for the "${name}" folder (${path}): initialize a git repository and make an initial commit of everything in it.`,
+  };
+}
+
+export function ReposRail({ refreshKey, onPinnedChange, onPrompt }: {
   refreshKey?: number;                       // bump to force a re-read (e.g. project changed)
   onPinnedChange?: (pinned: boolean) => void;
+  onPrompt?: (text: string) => void;         // drop a ready-to-send prompt into the chat composer
 }) {
   const [repos, setRepos] = useState<RepoState[]>([]);
   const [loading, setLoading] = useState(false);
@@ -37,7 +52,6 @@ export function ReposRail({ refreshKey, onPinnedChange }: {
     } catch { /* leave previous state */ } finally { setLoading(false); }
   }, []);
 
-  // Load the first time it opens; re-load when asked (refreshKey) while open.
   useEffect(() => { if (expanded && !loadedOnce) void load(); }, [expanded, loadedOnce, load]);
   useEffect(() => { if (expanded && loadedOnce) void load(); /* eslint-disable-line */ }, [refreshKey]);
   useEffect(() => { onPinnedChange?.(pinned); }, [pinned, onPinnedChange]);
@@ -78,15 +92,17 @@ export function ReposRail({ refreshKey, onPinnedChange }: {
             ? <div className="rrail__empty"><Loader2 size={13} className="animate-spin" /> Reading git state…</div>
             : repos.length === 0
               ? <div className="rrail__empty">No repositories found.</div>
-              : repos.map((r) => <RepoRow key={r.slug} repo={r} />)}
+              : repos.map((r) => <RepoRow key={r.slug} repo={r} onPrompt={onPrompt} />)}
         </div>
       </div>
     </aside>
   );
 }
 
-function RepoRow({ repo }: { repo: RepoState }) {
+function RepoRow({ repo, onPrompt }: { repo: RepoState; onPrompt?: (text: string) => void }) {
   const synced = repo.hasUpstream && !repo.ahead && !repo.behind;
+  const p = prompts(repo.name, repo.path);
+
   return (
     <div className="rrail__repo" title={repo.path}>
       <div className="rrail__repo-top">
@@ -100,7 +116,7 @@ function RepoRow({ repo }: { repo: RepoState }) {
       {repo.error ? (
         <div className="rrail__repo-meta rrail__repo-meta--err"><AlertCircle size={10} /> {repo.error}</div>
       ) : !repo.isGit ? (
-        <div className="rrail__repo-meta rrail__repo-meta--dim">not a git repo</div>
+        <div className="rrail__repo-meta rrail__repo-meta--dim">not tracked by git</div>
       ) : repo.commit ? (
         <div className="rrail__repo-meta"><span className="rrail__hash">{repo.commit.hash}</span> {repo.commit.subject}</div>
       ) : (
@@ -116,6 +132,32 @@ function RepoRow({ repo }: { repo: RepoState }) {
               : <span className="rrail__sync">{repo.ahead ? `↑${repo.ahead}` : ""}{repo.ahead && repo.behind ? " " : ""}{repo.behind ? `↓${repo.behind}` : ""}</span>
           )}
         </div>
+      )}
+
+      {/* Git for humans — buttons drop a prompt into the chat; Daryan does it. */}
+      {onPrompt && (
+        repo.isGit ? (
+          <div className="rrail__ops">
+            <button className="rrail__op" onClick={() => onPrompt(p.save)} title="Stage & commit your changes (writes a message for you)">
+              <Save size={11} /> Save
+            </button>
+            <button className="rrail__op" onClick={() => onPrompt(p.update)} title="Pull the latest changes from the remote">
+              <Download size={11} /> Update
+            </button>
+            <button className="rrail__op" onClick={() => onPrompt(p.upload)} title="Push your committed changes to GitHub">
+              <Upload size={11} /> Upload
+            </button>
+            <button className="rrail__op" onClick={() => onPrompt(p.changes)} title="Explain what's changed since the last commit">
+              <FileText size={11} /> Changes
+            </button>
+          </div>
+        ) : (
+          <div className="rrail__ops">
+            <button className="rrail__op rrail__op--wide" onClick={() => onPrompt(p.init)} title="Start tracking this folder with git and make a first commit">
+              <GitBranch size={11} /> Start tracking with git
+            </button>
+          </div>
+        )
       )}
     </div>
   );

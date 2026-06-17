@@ -654,7 +654,7 @@ export default function Home() {
       {/* File tree — docked left rail (hover to peek, pin to keep open) */}
       <FileTreeRail project={project} projectName={projectName} onPinnedChange={setTreePinned} onPick={(rel) => { setAttachments((p) => p.some((a) => a.relPath === rel) ? p : [...p, { relPath: rel, name: rel.split("/").pop() || rel }]); inputRef.current?.focus(); }} />
       {/* Connected repositories — docked right rail with live git state */}
-      <ReposRail onPinnedChange={setReposPinned} />
+      <ReposRail onPinnedChange={setReposPinned} onPrompt={(t) => { setText(t); inputRef.current?.focus(); }} />
       <ActivityDrawer open={activityOpen} project={project} projectName={projectName} tasks={recentTasks} activeSessionKey={activeSession} onClose={() => setActivityOpen(false)} onOpenSession={(k) => { switchSession(k); }} onPickUp={(t) => { setText(t); inputRef.current?.focus(); }} />
       <PersonaMemoryDrawer open={memoryOpen} onClose={() => setMemoryOpen(false)} refreshKey={memoryRefresh} project={project} projectName={projectName} />
 

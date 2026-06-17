@@ -1787,6 +1787,21 @@
 .rrail__sync { font-family: var(--font-mono); color: #e0a23c; }
 .rrail__sync--ok { color: #4ade80; }
 
+/* "git for humans" action buttons — drop a prompt into the chat */
+.rrail__ops { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; padding-top: 7px; border-top: 1px solid var(--aria-stroke); }
+.rrail__op {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 7px; border-radius: 7px;
+  font-size: 10.5px; font-weight: 500;
+  color: var(--aria-fg-dim);
+  background: color-mix(in srgb, var(--aria-fill) 85%, transparent);
+  border: 1px solid var(--aria-stroke);
+  transition: color .12s ease, background .12s ease, border-color .12s ease;
+}
+.rrail__op:hover { color: #c79bff; background: rgba(124,44,255,0.14); border-color: rgba(160,110,255,0.45); }
+.rrail__op svg { flex-shrink: 0; opacity: 0.85; }
+.rrail__op--wide { flex: 1; justify-content: center; }
+
 /* Voice toggle active state in the home header */
 .home-tool-btn--on { color: #c79bff; border-color: rgba(160,110,255,0.45); background: rgba(124,44,255,0.14); }
 
