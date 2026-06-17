@@ -16,6 +16,7 @@ import { cx } from "@/lib/format";
 import { useTaskStream } from "./use-task-stream";
 import { useReader } from "./use-reader";
 import { Markdown } from "@/components/persona/markdown";
+import { useDialogs } from "@/components/ui/dialogs";
 import { modelLabel } from "@/lib/models";
 
 type Integration = { name: string; envVar: string };
@@ -44,6 +45,7 @@ export function FlowGraph({ flow, byId, agents, onControl, onStop, onChain, onAn
   onEditRerun: (taskId: string, edit: { prompt?: string; title?: string } | null, rerun: false | "self" | "cascade") => Promise<void>;
   onSaveTemplate: (flow: Flow) => void;
 }) {
+  const { alert: notify, dialog: dialogNode } = useDialogs();
   // Build columns by dependency depth (longest path from a root).
   const { columns } = useMemo(() => layout(flow), [flow]);
   const tasks = flow.steps.map((s) => byId.get(s.taskId)).filter((t): t is Task => !!t);
@@ -67,7 +69,10 @@ export function FlowGraph({ flow, byId, agents, onControl, onStop, onChain, onAn
     try {
       const r = await fetch(`/api/flows/${flow.id}/handoff`, { method: "POST" });
       const data = await r.json().catch(() => null) as { project?: string; sessionKey?: string; error?: string } | null;
-      if (!r.ok || !data?.sessionKey) { alert(data?.error ?? "Couldn't hand this flow to Daryan."); return; }
+      if (!r.ok || !data?.sessionKey) {
+        await notify({ tone: "danger", title: "Handoff failed", body: data?.error ?? "Couldn't hand this flow to Daryan." });
+        return;
+      }
       window.location.href = `/?project=${encodeURIComponent(data.project || flow.project)}&session=${encodeURIComponent(data.sessionKey)}`;
     } finally { setHandingOff(false); }
   };
@@ -146,6 +151,7 @@ export function FlowGraph({ flow, byId, agents, onControl, onStop, onChain, onAn
           })}
         </div>
       </div>
+      {dialogNode}
     </div>
   );
 }
@@ -197,11 +203,25 @@ function FlowNode({ task, flow, agents, onStop, onChain, onAnswer, onEditRerun }
   const [chaining, setChaining] = useState(false);
   const [focus, setFocus] = useState(false);
   const reader = useReader();
+  const { confirm: askConfirm, dialog: dialogNode } = useDialogs();
   const hasDownstream = flow.specs.some((s) => (s.dependsOn ?? []).includes(task.stepKey ?? ""));
   const answeredQids = new Set(task.questions.filter((q) => q.answered).map((q) => q.qid));
   const cleanReply = stripMarkers(reply);
 
-  const askCascade = () => hasDownstream && confirm("Re-run downstream steps too? Their {{input}} depends on this step's output.\n\nOK = this step + downstream · Cancel = only this step");
+  // Re-running a step with dependents: ask whether to cascade. No dependents → no
+  // question (always "self"). Returns "cascade" | "self" for onEditRerun.
+  const askCascade = async (): Promise<"cascade" | "self"> => {
+    if (!hasDownstream) return "self";
+    const cascade = await askConfirm({
+      icon: <RotateCcw size={18} style={{ color: "#c79bff", flexShrink: 0 }} />,
+      title: "Re-run downstream steps too?",
+      body: <>Steps that depend on this one use its output as their <code>{"{{input}}"}</code>. Re-run them as well, or just this step?</>,
+      confirmLabel: "This + downstream",
+      cancelLabel: "Only this step",
+      confirmIcon: <RotateCcw size={13} />,
+    });
+    return cascade ? "cascade" : "self";
+  };
 
   return (
     <div className={cx("fg-node", `fg-node--${status}`)}>
@@ -239,7 +259,7 @@ function FlowNode({ task, flow, agents, onStop, onChain, onAnswer, onEditRerun }
             <div className="fg-node__editactions">
               <button className="tk-btn" onClick={() => { setEditing(false); setEditPrompt(task.promptTemplate); setEditTitle(task.title ?? task.label); }}>Cancel</button>
               <button className="tk-btn" onClick={async () => { await onEditRerun(task.id, { prompt: editPrompt, title: editTitle }, false); setEditing(false); }}><Check size={12} /> Save</button>
-              <button className="tk-btn tk-btn--primary" onClick={async () => { await onEditRerun(task.id, { prompt: editPrompt, title: editTitle }, askCascade() ? "cascade" : "self"); setEditing(false); }}><RotateCcw size={12} /> Save &amp; re-run</button>
+              <button className="tk-btn tk-btn--primary" onClick={async () => { const mode = await askCascade(); await onEditRerun(task.id, { prompt: editPrompt, title: editTitle }, mode); setEditing(false); }}><RotateCcw size={12} /> Save &amp; re-run</button>
             </div>
           </div>
         ) : (
@@ -279,7 +299,7 @@ function FlowNode({ task, flow, agents, onStop, onChain, onAnswer, onEditRerun }
         {cleanReply && <button className="fg-node__act" onClick={() => setFocus(true)} title="Expand to read"><Maximize2 size={11} /></button>}
         {live && status === "running" && <button className="fg-node__act" onClick={onStop} title="Stop step"><Square size={10} fill="currentColor" /></button>}
         {!editing && <button className="fg-node__act" onClick={() => { setShowPrompt(true); setEditing(true); }} title="Edit prompt"><Pencil size={11} /></button>}
-        {!live && <button className="fg-node__act" onClick={async () => { await onEditRerun(task.id, null, askCascade() ? "cascade" : "self"); }} title="Re-run step"><RotateCcw size={11} /></button>}
+        {!live && <button className="fg-node__act" onClick={async () => { const mode = await askCascade(); await onEditRerun(task.id, null, mode); }} title="Re-run this step"><RotateCcw size={11} /></button>}
         <button className="fg-node__act" onClick={() => setChaining((v) => !v)} title="Chain a step after this one"><GitBranch size={11} /></button>
       </div>
 
@@ -293,6 +313,7 @@ function FlowNode({ task, flow, agents, onStop, onChain, onAnswer, onEditRerun }
           onClose={() => setFocus(false)}
         />
       )}
+      {dialogNode}
     </div>
   );
 }

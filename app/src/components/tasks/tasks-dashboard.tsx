@@ -8,6 +8,7 @@ import {
   ArrowRight, HelpCircle, Info, Paperclip, FileText, Cpu, Bot,
 } from "lucide-react";
 import { cx } from "@/lib/format";
+import { useDialogs } from "@/components/ui/dialogs";
 import { useTaskStream, type TaskView } from "./use-task-stream";
 import { FlowGraph } from "./flow-graph";
 import { MODELS, modelLabel, DEFAULT_AGENT_MODEL } from "@/lib/models";
@@ -54,6 +55,7 @@ export function TasksDashboard() {
   const [templates, setTemplates] = useState<FlowTemplate[]>([]);
   const [panel, setPanel] = useState<null | "agents" | "newtask" | "flow">(null);
   const [loaded, setLoaded] = useState(false);   // first /api/tasks fetch resolved
+  const { prompt: askPrompt, alert: notify, dialog: dialogNode } = useDialogs();
 
   const projectName = project === WORKSPACE_KEY ? "All projects" : projects.find((p) => p.slug === project)?.name ?? project;
 
@@ -135,8 +137,17 @@ export function TasksDashboard() {
     if (rerun) await fetch(`/api/tasks/${taskId}/rerun`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cascade: rerun === "cascade" }) });
     void loadTasks();
   };
-  const saveAsTemplate = (flow: Flow) => {
-    const name = prompt("Template name:", flow.name);
+  const saveAsTemplate = async (flow: Flow) => {
+    const name = await askPrompt({
+      icon: <GitBranch size={18} style={{ color: "#c79bff", flexShrink: 0 }} />,
+      title: "Save flow as template",
+      body: <>Reuse this flow&apos;s steps and structure to start new flows later.</>,
+      inputLabel: "Template name",
+      initialValue: flow.name,
+      placeholder: "Template name",
+      confirmLabel: "Save template",
+      confirmIcon: <Check size={13} />,
+    });
     if (!name) return;
     const steps = flow.specs.map((s) => ({
       key: s.key,
@@ -145,8 +156,9 @@ export function TasksDashboard() {
       prompt: s.prompt,
       dependsOn: s.dependsOn ?? [],
     }));
-    void fetch("/api/flow-templates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, description: "", steps }) }).then(() => loadTemplates());
-    alert(`Saved "${name}" as a reusable template.`);
+    await fetch("/api/flow-templates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, description: "", steps }) });
+    await loadTemplates();
+    await notify({ icon: <Check size={18} style={{ color: "#7ee0a8", flexShrink: 0 }} />, title: "Template saved", body: <>Saved <b>{name}</b> as a reusable template.</> });
   };
 
   return (
@@ -241,6 +253,7 @@ export function TasksDashboard() {
       {panel === "agents" && <AgentsPanel agents={agents} skills={skills} placeholders={placeholders} onClose={() => setPanel(null)} reload={loadAgents} reloadSkills={loadSkills} />}
       {panel === "newtask" && <NewTaskPanel agents={agents} project={project} projectName={projectName} onClose={() => setPanel(null)} onStarted={() => { setPanel(null); void loadTasks(); }} />}
       {panel === "flow" && <FlowPanel agents={agents} templates={templates} project={project} onClose={() => setPanel(null)} onStarted={() => { setPanel(null); void loadTasks(); }} />}
+      {dialogNode}
     </div>
   );
 }
@@ -435,7 +448,9 @@ function StatusBadge({ status }: { status: TaskView["status"] }) {
 function AgentsPanel({ agents, skills, placeholders, onClose, reload, reloadSkills }: { agents: Agent[]; skills: Skill[]; placeholders: Integration[]; onClose: () => void; reload: () => Promise<void>; reloadSkills: () => Promise<void> }) {
   const [editing, setEditing] = useState<Agent | "new" | null>(null);
   const skillName = (id: string) => skills.find((s) => s.id === id)?.name ?? id;
+  const { confirm: askConfirm, dialog: dialogNode } = useDialogs();
   return (
+    <>
     <SlideOver title="Agents" subtitle="Reusable roles with skills + integrations you can assign to tasks and flow steps" onClose={onClose} icon={<Users size={16} />} wide>
       {editing ? (
         <AgentEditor
@@ -465,13 +480,27 @@ function AgentsPanel({ agents, skills, placeholders, onClose, reload, reloadSkil
                   </div>
                 )}
               </div>
-              <button className="aria-mem__act" onClick={() => setEditing(a)} title="Edit"><Pencil size={13} /></button>
-              <button className="aria-mem__act aria-mem__act--danger" title="Delete" onClick={async () => { if (confirm(`Delete agent "${a.name}"? Its saved credentials are removed too.`)) { await fetch(`/api/agents?id=${a.id}`, { method: "DELETE" }); await reload(); } }}><Trash2 size={13} /></button>
+              <button className="aria-mem__act" onClick={() => setEditing(a)} title={`Edit "${a.name}"`}><Pencil size={13} /></button>
+              <button className="aria-mem__act aria-mem__act--danger" title={`Delete agent "${a.name}"`} onClick={async () => {
+                const ok = await askConfirm({
+                  tone: "danger",
+                  icon: <Trash2 size={18} style={{ color: "#ff6b6b", flexShrink: 0 }} />,
+                  title: `Delete "${a.name}"?`,
+                  body: <>This removes the agent and its saved credentials. Tasks and flow steps that used it fall back to default Daryan.</>,
+                  confirmLabel: "Delete agent",
+                  confirmIcon: <Trash2 size={13} />,
+                });
+                if (!ok) return;
+                await fetch(`/api/agents?id=${a.id}`, { method: "DELETE" });
+                await reload();
+              }}><Trash2 size={13} /></button>
             </div>
           ))}
         </>
       )}
     </SlideOver>
+    {dialogNode}
+    </>
   );
 }
 
@@ -488,6 +517,7 @@ function AgentEditor({ agent, skills, placeholders, onCancel, onSaved, reloadSki
   const [viewSkillId, setViewSkillId] = useState<string | null>(null);   // skill being read (modal)
   const [creatingSkill, setCreatingSkill] = useState(false);             // custom-skill form (modal)
   const viewSkill = viewSkillId ? skills.find((s) => s.id === viewSkillId) ?? null : null;
+  const { confirm: askConfirm, dialog: dialogNode } = useDialogs();
 
   const toggleSkill = (id: string) => setSkillIds((s) => s.includes(id) ? s.filter((x) => x !== id) : [...s, id]);
   const hasIntegration = (envVar: string) => integrations.some((i) => i.envVar === envVar);
@@ -513,6 +543,7 @@ function AgentEditor({ agent, skills, placeholders, onCancel, onSaved, reloadSki
   };
 
   return (
+    <>
     <div className="tk-card" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <input className="tk-input" placeholder="Agent name (e.g. Researcher)" value={name} onChange={(e) => setName(e.target.value)} />
       <textarea className="aria-mem__textarea" style={{ minHeight: 100 }} placeholder="Instructions / role — what this agent does, its constraints, its output format…" value={instructions} onChange={(e) => setInstructions(e.target.value)} />
@@ -557,7 +588,15 @@ function AgentEditor({ agent, skills, placeholders, onCancel, onSaved, reloadSki
             skill={viewSkill}
             onClose={() => setViewSkillId(null)}
             onDelete={viewSkill.custom ? async () => {
-              if (!confirm(`Delete custom skill "${viewSkill.name}"? Agents that reference it simply stop applying it.`)) return;
+              const ok = await askConfirm({
+                tone: "danger",
+                icon: <Trash2 size={18} style={{ color: "#ff6b6b", flexShrink: 0 }} />,
+                title: `Delete "${viewSkill.name}"?`,
+                body: <>This removes the custom skill. Agents that reference it simply stop applying it.</>,
+                confirmLabel: "Delete skill",
+                confirmIcon: <Trash2 size={13} />,
+              });
+              if (!ok) return;
               await fetch(`/api/skills?id=${encodeURIComponent(viewSkill.id)}`, { method: "DELETE" });
               setViewSkillId(null);
               setSkillIds((ids) => ids.filter((x) => x !== viewSkill.id));
@@ -610,6 +649,8 @@ function AgentEditor({ agent, skills, placeholders, onCancel, onSaved, reloadSki
         </button>
       </div>
     </div>
+    {dialogNode}
+    </>
   );
 }
 
