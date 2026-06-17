@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getVoice } from "@/lib/voice-prefs";
 
 /* Streaming text-to-speech reader for node output.
  *
@@ -196,7 +197,7 @@ export function useReader() {
       try {
         const res = await fetch("/api/speak", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: sentence.slice(0, 1000) }),
+          body: JSON.stringify({ text: sentence.slice(0, 1000), voice: getVoice() }),
         });
         if (token !== tokenRef.current) return;
         if (!res.ok) throw new Error(`HTTP ${res.status}`);

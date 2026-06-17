@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { Mic, ArrowUp, Sparkles, X, Loader2, Wrench, AlertCircle, Volume2, VolumeX, Brain, ChevronDown, RefreshCw, Square, Play, Pause, Activity, GitBranch } from "lucide-react";
 import { cx } from "@/lib/format";
+import { getVoice } from "@/lib/voice-prefs";
 import { PERSONA, timeOfDay, QUICK_PROMPTS } from "./persona-config";
 import { PersonaMemoryDrawer } from "./persona-memory-drawer";
 import { DaryanThinking } from "./daryan-thinking";
@@ -200,7 +201,7 @@ export function PersonaWidget() {
       const res = await fetch("/api/speak", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: clean }),
+        body: JSON.stringify({ text: clean, voice: getVoice() }),
       });
       if (sessionToken !== speechSessionRef.current) return;
       if (!res.ok) throw new Error(`HTTP ${res.status}`);

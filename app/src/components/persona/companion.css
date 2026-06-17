@@ -1543,6 +1543,16 @@
 /* small home toolbar buttons (files + activity triggers) */
 .home-tool-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px; border-radius: 999px; font-size: 12.5px; color: var(--color-mid); border: 1px solid var(--color-line); background: var(--color-surface); transition: color .15s, border-color .15s; }
 .home-tool-btn:hover { color: var(--color-ink); border-color: var(--color-line-strong); }
+/* Voice picker — matches the tool buttons; appears when Voice is on */
+.home-voice-select {
+  height: 31px; max-width: 130px; padding: 0 8px; border-radius: 999px;
+  font-size: 12px; font-family: inherit;
+  color: var(--color-ink); border: 1px solid rgba(160,110,255,0.4);
+  background: color-mix(in oklab, var(--color-accent) 8%, var(--color-surface));
+  cursor: pointer; outline: none; transition: border-color .15s;
+}
+.home-voice-select:hover { border-color: rgba(160,110,255,0.7); }
+.home-voice-select:focus { border-color: rgba(160,110,255,0.8); box-shadow: 0 0 0 3px rgba(124,44,255,0.18); }
 
 /* Pull-up bar at the bottom that opens the activity drawer (bottom→top) */
 .home-pullup {

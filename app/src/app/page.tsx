@@ -10,6 +10,7 @@ import { ActivityDrawer } from "@/components/home/activity-drawer";
 import { PersonaMemoryDrawer } from "@/components/persona/persona-memory-drawer";
 import { Markdown } from "@/components/persona/markdown";
 import { useReader, stopAllReaders } from "@/components/tasks/use-reader";
+import { VOICE_GROUPS, DEFAULT_VOICE, getVoice, setVoice } from "@/lib/voice-prefs";
 import "@/components/persona/companion.css";
 
 /* ────────────────────────────────────────────────────────────
@@ -113,6 +114,20 @@ export default function Home() {
   // auto-play + a manual Listen can never overlap. stopAllReaders() stops audio.
   const [speakReplies, setSpeakReplies] = useState(false);
   const [autoPlayTurnId, setAutoPlayTurnId] = useState<number | null>(null);
+  const [voice, setVoiceState] = useState(DEFAULT_VOICE);   // reading voice (Kokoro); real value set client-side
+  useEffect(() => { setVoiceState(getVoice()); }, []);
+  // Play a short sample in the chosen voice so the user hears it on pick.
+  const previewVoice = useCallback(async (v: string) => {
+    stopAllReaders();
+    try {
+      const res = await fetch("/api/speak", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: `Hi, I'm ${PERSONA.name}.`, voice: v }) });
+      if (!res.ok) return;
+      const url = URL.createObjectURL(await res.blob());
+      const a = new Audio(url);
+      a.onended = () => URL.revokeObjectURL(url);
+      void a.play().catch(() => URL.revokeObjectURL(url));
+    } catch {}
+  }, []);
 
   // ── Attachments (any dropped file: image / text / doc) ──
   // Saved server-side into the project's .daryan-drops/ and referenced by path so
@@ -637,6 +652,21 @@ export default function Home() {
             >
               {speakReplies ? <Volume2 size={15} /> : <VolumeX size={15} />} Voice
             </button>
+            {speakReplies && (
+              <select
+                className="home-voice-select"
+                value={voice}
+                title="Pick the reading voice (Kokoro) — previews on change"
+                aria-label="Reading voice"
+                onChange={(e) => { const v = e.target.value; setVoice(v); setVoiceState(v); void previewVoice(v); }}
+              >
+                {VOICE_GROUPS.map((g) => (
+                  <optgroup key={g.group} label={g.group}>
+                    {g.voices.map((vo) => <option key={vo.id} value={vo.id}>{vo.label}</option>)}
+                  </optgroup>
+                ))}
+              </select>
+            )}
             <button className="home-tool-btn" onClick={() => setMemoryOpen(true)} title={`${PERSONA.name}'s memory — core, persistent & this project's recent/mid/long`}><Brain size={15} /> Memory</button>
             <button className="home-tool-btn" onClick={() => setActivityOpen(true)} title="Sessions & recent activity"><Clock size={15} /> Activity</button>
             <a href="/tasks" className="home-nav-btn" title="Mission Control">
