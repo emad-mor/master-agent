@@ -16,6 +16,10 @@ data/
 # Whisper.cpp binaries + model for local speech-to-text. Large, per-machine.
 whisper/
 
-# Kokoro TTS — Python venv + ~350 MB neural-voice models + setup scripts.
-# Large, per-machine.
-tts/
+# Kokoro TTS — keep the small sidecar SOURCE in git (server.py, requirements.txt,
+# start-tts.ps1) so a fresh clone can run voice; ignore the heavy per-machine
+# bits (Python venv + ~350 MB neural-voice models + logs).
+tts/.venv/
+tts/*.onnx
+tts/*.bin
+tts/*.log

@@ -1,0 +1,8 @@
+# Python deps for the Kokoro TTS sidecar (tts/server.py).
+# Installed automatically into tts/.venv by scripts/setup-tts.mjs on macOS/Linux.
+kokoro-onnx
+soundfile
+numpy
+fastapi
+uvicorn
+pydantic

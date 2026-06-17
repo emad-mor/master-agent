@@ -10,8 +10,14 @@ app/.next
 app/data
 
 # Large local voice assets (whisper binaries/model + Kokoro venv/models).
+# The small Kokoro sidecar source (app/tts/server.py, requirements.txt,
+# start-tts.ps1) IS tracked so a fresh clone can run voice; only the heavy
+# per-machine bits are ignored.
 app/whisper
-app/tts
+app/tts/.venv/
+app/tts/*.onnx
+app/tts/*.bin
+app/tts/*.log
 
 # Secrets safety net — no .env anywhere reaches a copy, but keep the example.
 **/.env
@@ -23,3 +29,6 @@ app/tts
 
 .DS_Store
 *.log
+
+# Local scratch / evaluation artifacts — not part of the app.
+temp/
