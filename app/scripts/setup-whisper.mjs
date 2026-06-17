@@ -10,7 +10,7 @@
  * install — every problem degrades to a warning + exit 0. No-op on Windows.
  */
 import { spawnSync } from 'node:child_process';
-import { existsSync, rmSync, symlinkSync } from 'node:fs';
+import { existsSync, rmSync, symlinkSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { which, runnable, isBrokenSymlink, isWin, isMac, whisperDir, log, warn } from './lib.mjs';
 
@@ -22,6 +22,9 @@ if (isWin) process.exit(0);
 
 function linkInto(target) {
   try {
+    // whisper/ is gitignored, so on a fresh clone it may not exist yet — create
+    // it before symlinking, or symlinkSync throws ENOENT and voice input breaks.
+    mkdirSync(whisperDir, { recursive: true });
     if (existsSync(binPath) || isBrokenSymlink(binPath)) rmSync(binPath, { force: true });
     symlinkSync(target, binPath);
     log(TAG, `Linked whisper-cli -> ${target}`);

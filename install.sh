@@ -48,6 +48,9 @@ fi
 command -v claude >/dev/null 2>&1 && ok "Claude CLI ready" || warn "Claude CLI not on PATH — open a new terminal, or run: npm i -g @anthropic-ai/claude-code"
 
 # 4 ── App dependencies (postinstall provisions whisper + the TTS venv) ──────
+# Create the (gitignored) voice asset dirs FIRST so postinstall's whisper-cli
+# symlink has somewhere to land.
+mkdir -p "$APP/tts" "$APP/whisper"
 say "Installing app dependencies…"
 ( cd "$APP" && npm install )
 
