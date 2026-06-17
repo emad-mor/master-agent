@@ -1,5 +1,5 @@
 export const PERSONA = {
-  name: "Aria",
+  name: "Daryan",
   role: "Your local Claude Code agent",
   // Greeting picks one based on time of day.
   greetings: {

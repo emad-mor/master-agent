@@ -161,7 +161,7 @@ export function TasksDashboard() {
 
       {/* top bar */}
       <header className="tk-top">
-        <Link href="/" className="tk-back" title="Back to Aria"><ArrowLeft size={16} /></Link>
+        <Link href="/" className="tk-back" title="Back to Daryan"><ArrowLeft size={16} /></Link>
         <span className="aria-head__spark" style={{ width: 32, height: 32 }}><Sparkles size={16} /></span>
         <div className="tk-title">
           <div className="tk-title__main">Mission Control</div>
@@ -295,7 +295,7 @@ function TaskPane({ task, live, agents, onStop, onChain, onAnswer }: {
         {task.agentName ? (
           <span className="tk-agent" style={{ ["--agent-color" as string]: task.agentColor ?? "#8b5cf6" }}>{task.agentName}</span>
         ) : (
-          <span className="tk-agent tk-agent--generic">Aria</span>
+          <span className="tk-agent tk-agent--generic">Daryan</span>
         )}
         {task.stepKey && <span className="tk-step">step {task.stepKey}</span>}
         <span className="tk-pane__label" title={task.prompt}>{task.label}</span>
@@ -405,7 +405,7 @@ function ChainComposer({ agents, onCancel, onSubmit }: { agents: Agent[]; onCanc
     <div className="tk-chaincompose">
       <div className="aria-proj" style={{ height: 30 }}>
         <select value={agentId} onChange={(e) => setAgentId(e.target.value)}>
-          <option value="">No agent — plain Aria</option>
+          <option value="">No agent — plain Daryan</option>
           {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
         </select>
       </div>
@@ -694,7 +694,7 @@ function NewTaskPanel({ agents, project, projectName, onClose, onStarted }: { ag
           <label className="tk-label"><Bot size={12} /> Agent <span className="tk-label__opt">optional</span></label>
           <div className="aria-proj">
             <select value={agentId} onChange={(e) => setAgentId(e.target.value)}>
-              <option value="">No agent — plain Aria</option>
+              <option value="">No agent — plain Daryan</option>
               {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
             </select>
           </div>
@@ -831,7 +831,7 @@ function FlowPanel({ agents, templates, project, onClose, onStarted }: { agents:
                 <span className="tk-step">step {s.key}</span>
                 <div className="aria-proj" style={{ flex: 1, height: 30 }}>
                   <select value={s.agentId} onChange={(e) => updateStep(s.key, { agentId: e.target.value })}>
-                    <option value="">No agent — plain Aria</option>
+                    <option value="">No agent — plain Daryan</option>
                     {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
                   </select>
                 </div>
@@ -858,7 +858,7 @@ function FlowPanel({ agents, templates, project, onClose, onStarted }: { agents:
         </>
       ) : (
         <>
-          <p className="tk-hint">Describe the goal in plain language. Aria plans a multi-agent flow from your agents, wires the dependencies, and runs it — you watch each step stream live.</p>
+          <p className="tk-hint">Describe the goal in plain language. Daryan plans a multi-agent flow from your agents, wires the dependencies, and runs it — you watch each step stream live.</p>
           <textarea className="aria-mem__textarea" style={{ flex: 1, minHeight: 180, resize: "none" }} placeholder="e.g. Research how auth works in this project, then implement rate-limiting on the login route, then review the change for security issues." value={goal} onChange={(e) => setGoal(e.target.value)} autoFocus />
           <button className="tk-btn tk-btn--primary" style={{ alignSelf: "flex-end" }} onClick={runPlan} disabled={!goal.trim() || busy}>
             {busy ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />} Plan &amp; run

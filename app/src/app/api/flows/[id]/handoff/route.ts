@@ -92,7 +92,7 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
     flow.rootInput ? `ASK: ${trimClean(flow.rootInput, 800)}` : "",
     "",
     "STEPS:",
-    ...ordered.map((t) => `- Step ${t.stepKey} (${t.agentName ?? "Aria"}): ${trimClean(stripMarkers(t.summary || t.reply), 1400)}`),
+    ...ordered.map((t) => `- Step ${t.stepKey} (${t.agentName ?? "Daryan"}): ${trimClean(stripMarkers(t.summary || t.reply), 1400)}`),
     "",
     `FINAL CONCLUSION:\n${trimClean(stripMarkers(conclusion.reply), 6000)}`,
   ].filter(Boolean).join("\n");

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Sparkles, Mic, ArrowUp, GitBranch, Clock, ArrowRight, AlertCircle, FolderTree, MoreHorizontal, RefreshCw, Loader2, Square, Activity, Paperclip, X, Plus, UploadCloud, FileText, Check, Volume2, VolumeX, Play, Pause, Brain, ChevronDown } from "lucide-react";
+import { Sparkles, Mic, ArrowUp, GitBranch, Clock, ArrowRight, AlertCircle, FolderTree, MoreHorizontal, RefreshCw, Loader2, Square, Activity, Paperclip, X, Plus, UploadCloud, FileText, Check, Volume2, VolumeX, Play, Pause, Brain, ChevronDown, Wrench } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cx } from "@/lib/format";
 import { PERSONA, timeOfDay, QUICK_PROMPTS } from "@/components/persona/persona-config";
@@ -21,6 +21,7 @@ const STORAGE_KEY = "aria.lastDraft";
 const PROJECT_KEY = "aria.activeProject";
 const SPEAK_KEY = "aria.speakReplies";
 const WORKSPACE_KEY = "__workspace__";
+const SELF_KEY = "__self__";              // Daryan's own source code (repo root) — edit the system itself
 const MIN_RECORDING_MS = 350;
 const WAVE_BARS = 48;
 
@@ -144,6 +145,8 @@ export default function Home() {
 
   const projectName = project === WORKSPACE_KEY
     ? "All projects"
+    : project === SELF_KEY
+    ? "Daryan source"
     : projects.find((p) => p.slug === project)?.name ?? project;
 
   // ── Upload dropped/picked files to the active project's .aria-drops ──
@@ -334,7 +337,7 @@ export default function Home() {
   useEffect(() => { try { localStorage.setItem(PROJECT_KEY, project); } catch {} }, [project]);
 
   useEffect(() => {
-    if (project !== WORKSPACE_KEY && projects.length > 0 && !projects.some((p) => p.slug === project)) {
+    if (project !== WORKSPACE_KEY && project !== SELF_KEY && projects.length > 0 && !projects.some((p) => p.slug === project)) {
       setProject(WORKSPACE_KEY);
     }
   }, [projects, project]);
@@ -634,7 +637,7 @@ export default function Home() {
             >
               {speakReplies ? <Volume2 size={15} /> : <VolumeX size={15} />} Voice
             </button>
-            <button className="home-tool-btn" onClick={() => setMemoryOpen(true)} title="Aria's memory — core, persistent & this project's recent/mid/long"><Brain size={15} /> Memory</button>
+            <button className="home-tool-btn" onClick={() => setMemoryOpen(true)} title={`${PERSONA.name}'s memory — core, persistent & this project's recent/mid/long`}><Brain size={15} /> Memory</button>
             <button className="home-tool-btn" onClick={() => setActivityOpen(true)} title="Sessions & recent activity"><Clock size={15} /> Activity</button>
             <a href="/tasks" className="home-nav-btn" title="Mission Control">
               <GitBranch size={15} /> Mission Control
@@ -647,6 +650,13 @@ export default function Home() {
         <div className="home-projsel">
           <span className="home-projsel__label"><FolderTree size={12} /> Project</span>
           <div className="home-projsel__pills">
+            <button
+              className={cx("home-projpill", "home-projpill--self", project === SELF_KEY && "home-projpill--active")}
+              onClick={() => onProjectChange(SELF_KEY)}
+              title={`Edit ${PERSONA.name}'s own source code — point the agent at this system's repo`}
+            >
+              <Wrench size={12} /> {PERSONA.name} source
+            </button>
             <button
               className={cx("home-projpill", project === WORKSPACE_KEY && "home-projpill--active")}
               onClick={() => onProjectChange(WORKSPACE_KEY)}
@@ -864,7 +874,7 @@ export default function Home() {
                   onChange={(e) => setText(e.target.value)}
                   onKeyDown={onKeyDown}
                   disabled={hasActiveTurn}
-                  placeholder={hasActiveTurn ? "Aria is working..." : `Ask ${PERSONA.name} anything...`}
+                  placeholder={hasActiveTurn ? `${PERSONA.name} is working...` : `Ask ${PERSONA.name} anything...`}
                   autoFocus
                 />
               )}

@@ -845,7 +845,7 @@ async function maybeMemorizeFlow(flowId: string) {
     // of its output), bounded so the prompt stays small.
     const stepLines = recs
       .filter((r) => r.task.status === "done")
-      .map((r) => `Step ${r.task.stepKey} (${r.task.agentName ?? "Aria"} — ${r.task.title ?? r.task.label}): ${(r.task.summary || stripAskMarkers(r.task.reply)).slice(0, 700)}`);
+      .map((r) => `Step ${r.task.stepKey} (${r.task.agentName ?? "Daryan"} — ${r.task.title ?? r.task.label}): ${(r.task.summary || stripAskMarkers(r.task.reply)).slice(0, 700)}`);
     const prompt = [
       "A multi-agent flow just completed. Distill its DURABLE learnings into 2-4 plain sentences for the assistant's long-term project memory.",
       "Capture: what was investigated/produced, the key findings or decisions, and anything the user is likely to reference later. Write in the third person, past tense. No markdown, no preamble.",

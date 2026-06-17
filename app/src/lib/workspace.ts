@@ -23,6 +23,12 @@ export const WORKSPACE_DIR = process.env.WORKSPACE_DIR
 // its own shared memory bucket. Selected when no specific project is active.
 export const WORKSPACE_KEY = "__workspace__";
 
+// Pseudo-project meaning "Daryan's OWN source code" — cwd at the repo root (the
+// folder containing this app/), so the agent can read and edit the Daryan
+// system itself. process.cwd() is the app/ dir (where `npm run dev` runs).
+export const SELF_KEY = "__self__";
+export const SELF_DIR = resolve(process.cwd(), "..");
+
 // Folder names that are never treated as projects.
 const IGNORE = new Set([".git", "node_modules", ".next", "dist", "out", ".vscode", ".idea", ".cache"]);
 
@@ -55,6 +61,9 @@ export async function resolveProject(
 ): Promise<{ cwd: string; key: string; name: string }> {
   if (!slug || slug === WORKSPACE_KEY) {
     return { cwd: WORKSPACE_DIR, key: WORKSPACE_KEY, name: "All projects" };
+  }
+  if (slug === SELF_KEY) {
+    return { cwd: SELF_DIR, key: SELF_KEY, name: "Daryan source" };
   }
   const found = (await listProjects()).find((p) => p.slug === slug);
   if (found) return { cwd: found.path, key: found.slug, name: found.name };

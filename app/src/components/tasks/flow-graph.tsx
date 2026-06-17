@@ -67,7 +67,7 @@ export function FlowGraph({ flow, byId, agents, onControl, onStop, onChain, onAn
     try {
       const r = await fetch(`/api/flows/${flow.id}/handoff`, { method: "POST" });
       const data = await r.json().catch(() => null) as { project?: string; sessionKey?: string; error?: string } | null;
-      if (!r.ok || !data?.sessionKey) { alert(data?.error ?? "Couldn't hand this flow to Aria."); return; }
+      if (!r.ok || !data?.sessionKey) { alert(data?.error ?? "Couldn't hand this flow to Daryan."); return; }
       window.location.href = `/?project=${encodeURIComponent(data.project || flow.project)}&session=${encodeURIComponent(data.sessionKey)}`;
     } finally { setHandingOff(false); }
   };
@@ -94,8 +94,8 @@ export function FlowGraph({ flow, byId, agents, onControl, onStop, onChain, onAn
           </button>
         )}
         {anyDone && (
-          <button className="fg__ctrl fg__ctrl--aria" onClick={() => void handoff()} disabled={handingOff} title="Carry these results into an Aria chat session — review and act on them in conversation">
-            {handingOff ? <Loader2 size={13} className="animate-spin" /> : <MessageCircle size={13} />} Continue with Aria
+          <button className="fg__ctrl fg__ctrl--aria" onClick={() => void handoff()} disabled={handingOff} title="Carry these results into a Daryan chat session — review and act on them in conversation">
+            {handingOff ? <Loader2 size={13} className="animate-spin" /> : <MessageCircle size={13} />} Continue with Daryan
           </button>
         )}
         {!flow.paused
@@ -209,7 +209,7 @@ function FlowNode({ task, flow, agents, onStop, onChain, onAnswer, onEditRerun }
         <span className="fg-node__step">{task.stepKey}</span>
         {task.agentName
           ? <span className="tk-agent" style={{ ["--agent-color" as string]: task.agentColor ?? "#8b5cf6", fontSize: 11 }}>{task.agentName}</span>
-          : <span className="tk-agent tk-agent--generic" style={{ fontSize: 11 }}>Aria</span>}
+          : <span className="tk-agent tk-agent--generic" style={{ fontSize: 11 }}>Daryan</span>}
         <span className="fg-node__title" title={task.title ?? task.label}>{task.title ?? task.label}</span>
         <span className="aria-head__spacer" />
         <NodeStatus status={status} />
@@ -410,7 +410,7 @@ function FocusOverlay({ task, status, summary, reply, prompt, onClose }: {
           <span className="fg-node__step">{task.stepKey}</span>
           {task.agentName
             ? <span className="tk-agent" style={{ ["--agent-color" as string]: task.agentColor ?? "#8b5cf6", fontSize: 12 }}>{task.agentName}</span>
-            : <span className="tk-agent tk-agent--generic" style={{ fontSize: 12 }}>Aria</span>}
+            : <span className="tk-agent tk-agent--generic" style={{ fontSize: 12 }}>Daryan</span>}
           <span className="fg-focus__title">{task.title ?? task.label}</span>
           <NodeStatus status={status} />
           <span className="aria-head__spacer" />
@@ -489,7 +489,7 @@ function ChainComposer({ agents, onCancel, onSubmit }: { agents: Agent[]; onCanc
     <div className="tk-chaincompose" style={{ margin: "8px 0 0" }}>
       <div className="aria-proj" style={{ height: 28 }}>
         <select value={agentId} onChange={(e) => setAgentId(e.target.value)}>
-          <option value="">No agent — plain Aria</option>
+          <option value="">No agent — plain Daryan</option>
           {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
         </select>
       </div>

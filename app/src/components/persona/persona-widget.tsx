@@ -635,7 +635,7 @@ export function PersonaWidget() {
                   <button
                     className={cx("aria-iconbtn", speakReplies && "aria-iconbtn--on")}
                     onClick={() => setSpeakReplies((v) => !v)}
-                    title={speakReplies ? "Mute Aria's voice" : "Have Aria read replies aloud"}
+                    title={speakReplies ? `Mute ${PERSONA.name}'s voice` : `Have ${PERSONA.name} read replies aloud`}
                     aria-pressed={speakReplies}
                     aria-label={speakReplies ? "Mute voice" : "Enable voice"}
                   >
@@ -727,7 +727,7 @@ export function PersonaWidget() {
                       <i /><i /><i /><i />
                     </span>
                     <span className="aria-voicebar__label">
-                      {ttsPlayback === "playing" ? "Aria is speaking" : "Voice paused"}
+                      {ttsPlayback === "playing" ? `${PERSONA.name} is speaking` : "Voice paused"}
                     </span>
                     {ttsPlayback === "playing" ? (
                       <button className="aria-voicebar__btn" onClick={pauseSpeech} title="Pause voice" aria-label="Pause voice"><Pause size={14} /></button>
@@ -756,7 +756,7 @@ export function PersonaWidget() {
                       onChange={(e) => setText(e.target.value)}
                       onKeyDown={onKeyDown}
                       disabled={hasActiveTurn}
-                      placeholder={hasActiveTurn ? "Aria is working — Stop to interrupt, or wait…" : `Ask ${PERSONA.name} about ${projectName}…`}
+                      placeholder={hasActiveTurn ? `${PERSONA.name} is working — Stop to interrupt, or wait…` : `Ask ${PERSONA.name} about ${projectName}…`}
                     />
                   )}
 

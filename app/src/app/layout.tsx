@@ -3,7 +3,7 @@ import "./globals.css";
 import { PersonaWidget } from "@/components/persona/persona-widget";
 
 export const metadata: Metadata = {
-  title: "Aria — local agent",
+  title: "Daryan — local agent",
   description: "A local, voice-driven Claude Code agent with layered per-project memory.",
 };
 

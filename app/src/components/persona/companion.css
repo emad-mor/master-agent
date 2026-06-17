@@ -1510,6 +1510,20 @@
   background: linear-gradient(135deg, #8c3cff, #c42b8a);
   box-shadow: 0 2px 10px rgba(140,60,255,0.35);
 }
+/* "Daryan source" — edit the system itself; set apart with an amber/tool accent
+   and an inline icon so it doesn't read as just another project. */
+.home-projpill--self {
+  display: inline-flex; align-items: center; gap: 5px;
+  border-color: rgba(224,162,60,0.45); color: #e0a23c;
+  border-style: dashed;
+}
+.home-projpill--self:hover { color: #f0b450; border-color: rgba(224,162,60,0.7); background: color-mix(in oklab, #e0a23c 8%, var(--color-surface)); }
+.home-projpill--self.home-projpill--active {
+  color: #1a1206; border-style: solid; border-color: transparent;
+  background: linear-gradient(135deg, #f0b450, #e0822c);
+  box-shadow: 0 2px 10px rgba(224,140,40,0.4);
+}
+.home-projpill--self svg { flex-shrink: 0; }
 
 /* ── Drag-drop overlay + attachment chips ── */
 .home-drop {

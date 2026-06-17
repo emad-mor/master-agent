@@ -135,7 +135,7 @@ export function PersonaMemoryDrawer({ open, onClose, refreshKey, project, projec
   }, [q, projectName, load]);
 
   const wipeAll = useCallback(async () => {
-    if (!confirm(`Wipe ${projectName}'s conversational memory? Core facts survive. Aria starts fresh on this project next Send.`)) return;
+    if (!confirm(`Wipe ${projectName}'s conversational memory? Core facts survive. Daryan starts fresh on this project next Send.`)) return;
     await fetch(`/api/persona/memory?${q}&all=1`, { method: "DELETE" });
     await load();
   }, [q, projectName, load]);
@@ -231,7 +231,7 @@ export function PersonaMemoryDrawer({ open, onClose, refreshKey, project, projec
                     value={draft}
                     onChange={(e) => setDraft(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void pinFact(); } }}
-                    placeholder="Pin a durable fact for Aria… (⌘/Ctrl+Enter to add)"
+                    placeholder="Pin a durable fact for Daryan… (⌘/Ctrl+Enter to add)"
                     className="aria-mem__textarea"
                   />
                   <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8 }}>
@@ -243,7 +243,7 @@ export function PersonaMemoryDrawer({ open, onClose, refreshKey, project, projec
                 </div>
 
                 {core.length === 0
-                  ? <Empty label="No core facts yet. Pin the things Aria should never forget." />
+                  ? <Empty label="No core facts yet. Pin the things Daryan should never forget." />
                   : groupByCategory(core.filter((c) => passFilter(c.category)), (c) => catOf(c.category), (c) => new Date(c.ts).getTime()).map(([cat, items]) => (
                     <CategoryGroup key={cat} cat={cat} count={items.length}>
                       {items.map((c) => (
@@ -280,7 +280,7 @@ export function PersonaMemoryDrawer({ open, onClose, refreshKey, project, projec
 
             {tab === "recent" && (
               recent.length === 0
-                ? <Empty label={`No recent turns for ${projectName} yet. Send Aria a message to start.`} />
+                ? <Empty label={`No recent turns for ${projectName} yet. Send Daryan a message to start.`} />
                 : groupByCategory(recent.filter((t) => passFilter(t.category)), (t) => catOf(t.category), (t) => t.id).map(([cat, items]) => (
                   <CategoryGroup key={cat} cat={cat} count={items.length}>
                     {items.map((t) => (

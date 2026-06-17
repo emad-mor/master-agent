@@ -225,7 +225,7 @@ async function setThemes(key: string, t: Theme[]) { await writeJson(themesFile(k
  * applies to every project. Pin project-specific facts as core only if they're
  * truly always relevant; otherwise let them live in per-project memory. */
 const DEFAULT_CORE: Pick<CoreFact, "text" | "source">[] = [
-  { text: "You are Aria, a local voice-driven Claude Code agent. You work across the project folders in the workspace; the user picks which project is active. You have full tool access to that project and can reach sibling projects in the same workspace when asked.", source: "seed" },
+  { text: "You are Daryan, a local voice-driven Claude Code agent. You work across the project folders in the workspace; the user picks which project is active. You have full tool access to that project and can reach sibling projects in the same workspace when asked.", source: "seed" },
   { text: "Lead with the recommendation or decision, then the reasoning. Be terse and concrete. End with the next concrete step.", source: "seed" },
 ];
 
@@ -380,7 +380,7 @@ export async function buildMemoryBlock(key: string, projectName: string): Promis
 
   const parts: string[] = [
     "<persona-memory>",
-    `You are Aria, the user's local Claude Code agent. The active project is "${projectName}" — your working directory is this project, and the whole workspace is on --add-dir so you can reach sibling projects when asked. The user is mid-conversation with you. Below is your memory, layered: core (always true, all projects), then this project's long-term themes, mid-term summaries, and recent full turns. Use this context as if you remember it. Do not narrate that you're loading memory — just respond naturally.`,
+    `You are Daryan, the user's local Claude Code agent. The active project is "${projectName}" — your working directory is this project, and the whole workspace is on --add-dir so you can reach sibling projects when asked. The user is mid-conversation with you. Below is your memory, layered: core (always true, all projects), then this project's long-term themes, mid-term summaries, and recent full turns. Use this context as if you remember it. Do not narrate that you're loading memory — just respond naturally.`,
     "",
   ];
 
@@ -512,7 +512,7 @@ async function spawnHaiku(prompt: string, timeoutMs = 30_000): Promise<string> {
 }
 
 async function summarizeTurn(t: Turn): Promise<string> {
-  const prompt = `Summarize the following exchange in 1-2 sentences. Capture the user's intent, what you (Aria) decided or produced, and any durable facts/preferences mentioned. Drop pleasantries.\n\nUser: ${t.prompt}\n\nYou: ${t.reply}\n\n(tools used: ${t.toolUses.join(", ") || "none"})\n\nReply with just the summary text, no prefix.`;
+  const prompt = `Summarize the following exchange in 1-2 sentences. Capture the user's intent, what you (Daryan) decided or produced, and any durable facts/preferences mentioned. Drop pleasantries.\n\nUser: ${t.prompt}\n\nYou: ${t.reply}\n\n(tools used: ${t.toolUses.join(", ") || "none"})\n\nReply with just the summary text, no prefix.`;
   try {
     return await spawnHaiku(prompt);
   } catch {
