@@ -19,7 +19,7 @@
  * Storage is plain JSON under app/data/memory/ — easy to inspect, edit, wipe.
  * Gitignored. */
 
-import { mkdir, readFile, writeFile, readdir, unlink, stat } from "node:fs/promises";
+import { mkdir, readFile, writeFile, rename, readdir, unlink, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { spawn } from "node:child_process";
@@ -79,9 +79,10 @@ export type Theme = {
 export type CoreFact = {
   id: string;
   text: string;
-  ts: string;                         // when pinned
-  source: "seed" | "user" | "aria";   // who pinned it
-  category?: string;                  // topic title for grouping
+  ts: string;                              // when pinned
+  source: "seed" | "user" | "aria" | "flow";  // who pinned it
+  category?: string;                       // topic title for grouping
+  created_at?: string;                     // ISO timestamp for flow ingestions
 };
 
 type SessionState = {
@@ -114,7 +115,18 @@ async function readJson<T>(path: string, fallback: T): Promise<T> {
 
 async function writeJson(path: string, data: unknown) {
   await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, JSON.stringify(data, null, 2), "utf8");
+  // Atomic write: write to a unique tmp file, then rename over the target.
+  // rename is atomic on POSIX, so a reader sees either the old whole file or
+  // the new whole file — never a torn one. The pid+random suffix keeps
+  // concurrent writers to the same path from colliding on one .tmp name.
+  const tmp = `${path}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(tmp, JSON.stringify(data, null, 2), "utf8");
+    await rename(tmp, path);
+  } catch (e) {
+    await unlink(tmp).catch(() => {});
+    throw e;
+  }
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -371,6 +383,39 @@ export async function sessionHistory(projectKey: string, sessionKey: string): Pr
 
 /* Returns a single string ready to prepend to the user's prompt. Empty only if
  * there is genuinely nothing (no core and a brand-new project). */
+// ── Memory compaction (keep the INJECTED block lean) ──
+// The stored turn keeps the FULL reply (so on-screen history stays intact on
+// reload); what we INJECT is compacted. The verbatim recent-turn block is ~80%
+// of the per-turn token weight, and most of it is UI scaffolding the model never
+// needs replayed: the [[SUMMARY]]/[[NEXT]] markers, and big artifacts (code
+// blocks, decks, file dumps). Strip those + cap length → big cut, low risk.
+const SUMMARY_BLOCK_RE = /\[\[\s*(?:SUMMARY|SPEAK)\s*\]\]([\s\S]*?)\[\[\s*\/\s*(?:SUMMARY|SPEAK)\s*\]\]/i;
+
+// The agent's own ear-friendly recap, if present — a ready-made turn summary.
+export function extractSummary(reply: string): string {
+  const m = SUMMARY_BLOCK_RE.exec(reply);
+  return m && m[1].trim() ? m[1].trim() : "";
+}
+
+// Compact a reply for INJECTION: drop the recap block + UI markers, truncate
+// large fenced code blocks to a reference, and cap length. Falls back to the
+// recap when the reply was essentially just that (voice-first concise turns).
+const COMPACT_CAP = 1600;
+export function compactReply(reply: string): string {
+  const detail = reply
+    .replace(/\[\[\s*(?:SUMMARY|SPEAK)\s*\]\][\s\S]*?\[\[\s*\/\s*(?:SUMMARY|SPEAK)\s*\]\]/gi, "")   // recap block (reused as the mid-tier summary; not needed verbatim)
+    .replace(/\[\[\s*(?:NEXT|FLOW|ASK)\b[\s\S]*?\]\]/gi, "")                                          // UI action markers (non-greedy: tolerates a literal ] inside an attribute)
+    .replace(/\[\[\s*\/?\s*(?:SUMMARY|SPEAK|NEXT|FLOW|ASK)\b[\s\S]*$/i, "")                            // any dangling/partial marker (mid-stream)
+    .replace(/```[\s\S]*?```/g, (b) => b.length > 300 ? "```\n[code omitted from memory — re-read the file if needed]\n```" : b)
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  let body = detail.length >= 40 ? detail : (extractSummary(reply) || detail);
+  if (body.length > COMPACT_CAP) body = body.slice(0, COMPACT_CAP).trimEnd() + " […trimmed for memory…]";
+  return body;
+}
+
+const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n).trimEnd() + "…" : s);
+
 export async function buildMemoryBlock(key: string, projectName: string): Promise<string> {
   const [core, turns, summaries, themes] = await Promise.all([
     listCore(), listTurns(key), listSummaries(key), listThemes(key),
@@ -403,11 +448,11 @@ export async function buildMemoryBlock(key: string, projectName: string): Promis
   }
 
   if (recent.length > 0) {
-    parts.push(`## Recent turns — ${projectName} (verbatim, oldest first)`);
+    parts.push(`## Recent turns — ${projectName} (oldest first)`);
     for (const t of recent) {
       parts.push(`### Turn ${t.id} — ${t.ts}`);
-      parts.push(`User: ${t.prompt}`);
-      parts.push(`You: ${t.reply}`);
+      parts.push(`User: ${clip(t.prompt, 600)}`);
+      parts.push(`You: ${compactReply(t.reply)}`);
       if (t.toolUses.length > 0) parts.push(`(tools used: ${t.toolUses.join(", ")})`);
       parts.push("");
     }
@@ -512,6 +557,11 @@ async function spawnHaiku(prompt: string, timeoutMs = 30_000): Promise<string> {
 }
 
 async function summarizeTurn(t: Turn): Promise<string> {
+  // Reuse the agent's own [[SUMMARY]] recap when present — it IS a turn summary
+  // ("what I did + what's next"), so we skip the Haiku call entirely. Only fall
+  // back to a Haiku summary for turns without one (flow/handoff/legacy turns).
+  const recap = extractSummary(t.reply);
+  if (recap) return clip(recap, 600);
   const prompt = `Summarize the following exchange in 1-2 sentences. Capture the user's intent, what you (Daryan) decided or produced, and any durable facts/preferences mentioned. Drop pleasantries.\n\nUser: ${t.prompt}\n\nYou: ${t.reply}\n\n(tools used: ${t.toolUses.join(", ") || "none"})\n\nReply with just the summary text, no prefix.`;
   try {
     return await spawnHaiku(prompt);
