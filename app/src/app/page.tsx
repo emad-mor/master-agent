@@ -72,11 +72,29 @@ function parseSuggestions(reply: string): Suggestion[] {
 // suggestion markers and [[FLOW]] launch markers.
 function stripSuggestions(reply: string): string {
   return reply
-    .replace(/\[\[\s*(NEXT|FLOW)\b[^\]]*\]\]/gi, "")   // complete markers
+    .replace(/\[\[\s*(NEXT|FLOW)\b[\s\S]*?\]\]/gi, "")  // complete markers (non-greedy: tolerates a literal ] inside an attribute)
     .replace(/\[\[\s*(NEXT|FLOW)\b[\s\S]*$/i, "")       // partial trailing marker while streaming
+    .replace(/\[\[\s*\/?\s*(SUMMARY|SPEAK)\s*\]\]/gi, "")  // stray SUMMARY (or legacy SPEAK) markers — never leak
     .replace(/\n?\s*-{3,}\s*$/g, "")                     // trailing --- separator
     .replace(/\n{3,}/g, "\n\n")
     .trimEnd();
+}
+// The agent ends voice-first replies with a "More details" action that unlocks
+// the full written breakdown for one turn. That ONE suggestion renders as a
+// small inline button at the end of the reply (not a full next-step card).
+const isMoreDetails = (s: Suggestion) => /^\s*more\s+detail/i.test(s.label);
+
+// The agent wraps a short voice-first recap in [[SUMMARY]]…[[/SUMMARY]]. On the
+// home chat that recap IS the default visible+spoken reply; the fuller detail
+// the agent wrote sits behind a "More details" expander.
+const SUMMARY_RE = /\[\[\s*(?:SUMMARY|SPEAK)\s*\]\]([\s\S]*?)\[\[\s*\/\s*(?:SUMMARY|SPEAK)\s*\]\]/i;
+function extractSummary(reply: string): string {
+  const m = SUMMARY_RE.exec(reply);
+  return m && m[1].trim() ? m[1].trim() : "";
+}
+// The reply with the whole [[SUMMARY]] (or legacy [[SPEAK]]) block removed → detail.
+function stripSummaryBlock(reply: string): string {
+  return reply.replace(SUMMARY_RE, "").replace(/\[\[\s*\/?\s*(SUMMARY|SPEAK)\s*\]\]/gi, "").trim();
 }
 
 export default function Home() {
@@ -980,13 +998,27 @@ function AssistantReply({ turn, autoPlay, onPick }: { turn: Turn; autoPlay: bool
   const textMapRef = useRef<{ reply: string; map: TextMap } | null>(null);
   const ownsHlRef = useRef(false);                            // did THIS instance set the global highlights?
   const lastIdxRef = useRef(-1);
+  const [detailsOpen, setDetailsOpen] = useState(false);      // "More details" expander
   const reply = turn.reply;
   const streaming = turn.status === "streaming";
 
+  // Voice-first: the [[SUMMARY]] recap is the default visible + spoken reply; the
+  // fuller detail the agent wrote sits behind "More details". No summary block
+  // (old turns / agent omitted it) → fall back to the whole reply.
+  const summary = extractSummary(reply);
+  const detail = summary ? stripSuggestions(stripSummaryBlock(reply)) : "";
+  const hasDetail = !!summary && detail.length > 0 && detail !== summary.trim();
+  const spoken = summary || stripSuggestions(reply);          // what the reader speaks
+  const visible = streaming
+    ? stripSuggestions(reply)                                  // show the live text while streaming
+    : summary
+      ? (detailsOpen ? detail : stripSuggestions(summary))
+      : stripSuggestions(reply);
+
   // Auto-play exactly once when this reply is tagged (Voice on + just finished).
   useEffect(() => {
-    if (autoPlay && !didAutoRef.current && reply.trim()) { didAutoRef.current = true; void play(reply); }
-  }, [autoPlay, reply, play]);
+    if (autoPlay && !didAutoRef.current && spoken.trim()) { didAutoRef.current = true; void play(spoken); }
+  }, [autoPlay, spoken, play]);
 
   const playing = status === "playing";
   const active = status !== "idle";                 // loading | playing | paused
@@ -1005,8 +1037,8 @@ function AssistantReply({ turn, autoPlay, onPick }: { turn: Turn; autoPlay: bool
       return;
     }
     ensureHighlightStyles();
-    if (!textMapRef.current || textMapRef.current.reply !== reply) {
-      textMapRef.current = { reply, map: buildTextMap(replyRef.current) };
+    if (!textMapRef.current || textMapRef.current.reply !== visible) {
+      textMapRef.current = { reply: visible, map: buildTextMap(replyRef.current) };
     }
     const tm = textMapRef.current.map;
     const ok = applySpokenHighlights(tm, sentenceList, activeIndex, activeFraction);
@@ -1015,7 +1047,7 @@ function AssistantReply({ turn, autoPlay, onPick }: { turn: Turn; autoPlay: bool
       lastIdxRef.current = activeIndex;
       scrollSentenceIntoView(tm, sentenceList, activeIndex);
     }
-  }, [reading, reply, sentenceList, activeIndex, activeFraction]);
+  }, [reading, visible, sentenceList, activeIndex, activeFraction]);
 
   // Clear highlights if this instance unmounts mid-read.
   useEffect(() => () => { if (ownsHlRef.current) clearSpokenHighlights(); }, []);
@@ -1029,9 +1061,15 @@ function AssistantReply({ turn, autoPlay, onPick }: { turn: Turn; autoPlay: bool
       {/* The answer stays fully formatted at all times; the spoken sentence/word
           is painted over it via CSS Custom Highlights (see the effect above). */}
       <div ref={replyRef} className="aria-reply__md">
-        <Markdown>{stripSuggestions(reply)}</Markdown>
+        <Markdown>{visible}</Markdown>
         {streaming && reply && <span className="aria-caret" />}
       </div>
+      {hasDetail && !streaming && (
+        <button className="reply-more" onClick={() => setDetailsOpen((o) => !o)} aria-expanded={detailsOpen}>
+          <ChevronDown size={13} style={{ transform: detailsOpen ? "rotate(180deg)" : undefined, transition: "transform .15s" }} />
+          <span>{detailsOpen ? "Hide details" : "More details"}</span>
+        </button>
+      )}
 
       {/* A multi-agent flow Aria launched from this turn */}
       {turn.flow && (
@@ -1047,20 +1085,41 @@ function AssistantReply({ turn, autoPlay, onPick }: { turn: Turn; autoPlay: bool
           )
       )}
 
-      {/* Clickable next-step suggestions — title + full prompt */}
-      {!streaming && (turn.suggestions?.length ?? 0) > 0 && (
-        <div className="reply-next">
-          <span className="reply-next__label">Next steps</span>
-          <div className="reply-next__chips">
-            {turn.suggestions!.map((s, i) => (
-              <button key={i} className="reply-next__chip" title={`Run: ${s.prompt}`} onClick={() => onPick(s.prompt)}>
-                <span className="reply-next__head"><span className="reply-next__title">{s.label}</span><ArrowRight size={13} /></span>
-                <span className="reply-next__desc">{s.prompt}</span>
+      {/* Clickable next-step suggestions — title + full prompt. The "more details"
+          action (which unlocks the full written breakdown past the SUMMARY-only
+          reply) is pulled out and rendered as a compact inline pill at the very
+          bottom, not a full card. */}
+      {!streaming && (() => {
+        const all = turn.suggestions ?? [];
+        const moreIdx = all.findIndex(isMoreDetails);
+        const more = moreIdx >= 0 ? all[moreIdx] : null;
+        const cards = moreIdx >= 0 ? all.filter((_, i) => i !== moreIdx) : all;
+        return (
+          <>
+            {cards.length > 0 && (
+              <div className="reply-next">
+                <span className="reply-next__label">Next steps</span>
+                <div className="reply-next__chips">
+                  {cards.map((s, i) => (
+                    <button key={i} className="reply-next__chip" title={`Run: ${s.prompt}`} onClick={() => onPick(s.prompt)}>
+                      <span className="reply-next__head"><span className="reply-next__title">{s.label}</span><ArrowRight size={13} /></span>
+                      <span className="reply-next__desc">{s.prompt}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {/* Re-ask "More details" only when there's no inline detail to expand
+                (the reply was concise); otherwise the inline expander above covers it. */}
+            {more && !hasDetail && (
+              <button className="reply-more" title={`Run: ${more.prompt}`} onClick={() => onPick(more.prompt)}>
+                <ChevronDown size={13} />
+                <span>{more.label}</span>
               </button>
-            ))}
-          </div>
-        </div>
-      )}
+            )}
+          </>
+        );
+      })()}
 
       {/* Voice controls — Listen / synthesizing / play-pause-stop + scrub timeline */}
       {reply && !streaming && (

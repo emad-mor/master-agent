@@ -76,6 +76,11 @@ export async function POST(req: NextRequest) {
     ? `\n\nAttached files (in this project; read them with your tools):\n${atts.map((a) => `- ./${a.relPath}${a.name && a.name !== a.relPath ? ` (${a.name})` : ""}`).join("\n")}`
     : "";
 
+  // A short, ear-friendly spoken summary the UI extracts and reads aloud INSTEAD
+  // of the full reply. The on-screen reply keeps the detailed working narrative;
+  // this marker carries a 1-2 paragraph plain recap so TTS isn't jarring.
+  const speakSummary = "\n\n---\nCRITICAL — the UI speaks ONLY the [[SUMMARY]] block below and NOTHING ELSE. If you omit it, the user hears silence. So you MUST ALWAYS include it, on EVERY reply, in EXACTLY this format:\n[[SUMMARY]]\n<1-2 short paragraphs of plain conversational prose — what you did and what should happen next. NO markdown, code, file paths, bullet lists, or tool play-by-play. Write it to be heard, not read.>\n[[/SUMMARY]]\nPut this BEFORE the next-step markers below. Never skip it.";
+
   // Always ask for clickable next-step suggestions as a machine-readable trailer
   // the UI parses into chips (and strips from the visible reply). Same marker
   // style as the orchestrator's [[ASK]] protocol.
@@ -87,7 +92,7 @@ export async function POST(req: NextRequest) {
   // card in the conversation (and in Mission Control).
   const flowAbility = "\n\nFLOW LAUNCHING — you can run multi-agent flows. ONLY when the user explicitly asks for a flow, parallel agents, multi-agent research, or orchestrated work, emit ONE line in EXACTLY this format (then briefly tell them what the flow will do):\n[[FLOW goal=\"<a self-contained goal statement for the flow planner — include all context it needs, since the planner can't see this conversation>\"]]\nDo NOT emit it for ordinary questions you can answer yourself.";
 
-  const finalPrompt = `${memoryBlock ? memoryBlock + "\n\n" : ""}${userPrompt}${attBlock}${nextSteps}${flowAbility}`;
+  const finalPrompt = `${memoryBlock ? memoryBlock + "\n\n" : ""}${userPrompt}${attBlock}${speakSummary}${nextSteps}${flowAbility}`;
   const resumeId = !inject && session.claudeSessionId ? session.claudeSessionId : null;
 
   const stream = new ReadableStream<Uint8Array>({

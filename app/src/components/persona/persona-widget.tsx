@@ -20,6 +20,26 @@ const WAVE_BARS = 48;
 // Strip emoji and markdown noise that TTS would read out literally, chunk on
 // sentence boundaries. (Unchanged from the original — speech hygiene.)
 const SENTENCE_END = /([.!?]+\s+|\n{2,})/;
+
+// The agent emits a dedicated ear-friendly recap as [[SUMMARY]]…[[/SUMMARY]]. We
+// speak ONLY that block (not the full working narrative). If it's missing, we
+// fall back to the whole reply with the action markers stripped.
+const SUMMARY_RE = /\[\[\s*SUMMARY\s*\]\]([\s\S]*?)\[\[\s*\/\s*SUMMARY\s*\]\]/i;
+// We ONLY ever speak the dedicated [[SUMMARY]] recap. If the agent omits it, we
+// speak nothing rather than reading the full working narrative aloud (that was
+// the jarring behavior we're fixing). Returning "" tells the caller to stay
+// silent for this turn.
+function extractSpoken(reply: string): string {
+  const m = SUMMARY_RE.exec(reply);
+  if (m && m[1].trim()) return m[1].trim();
+  return "";
+}
+
+// Remove the [[SUMMARY]] block (and a dangling open marker) from the on-screen
+// reply so the recap meant for the ear never renders as text.
+function stripSpoken(reply: string): string {
+  return reply.replace(SUMMARY_RE, "").replace(/\[\[\s*\/?\s*SUMMARY\s*\]\]/gi, "").trim();
+}
 function cleanForSpeech(s: string): string {
   return s
     .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{1F000}-\u{1F2FF}]/gu, "")
@@ -81,13 +101,13 @@ export function PersonaWidget() {
   const [speakReplies, setSpeakReplies] = useState(false);
   const [ttsError, setTtsError] = useState<string | null>(null);
   const [ttsEngine, setTtsEngine] = useState<"kokoro" | "browser" | "checking">("checking");
-  const speakBufRef = useRef("");
   const speakSupportedRef = useRef(typeof window !== "undefined" && "speechSynthesis" in window);
   const browserVoiceRef = useRef<SpeechSynthesisVoice | null>(null);
   const audioQueueRef = useRef<string[]>([]);
   const audioPlayingRef = useRef(false);
   const audioElRef = useRef<HTMLAudioElement | null>(null);
   const speechSessionRef = useRef(0);
+  const spokenTurnsRef = useRef<Set<number>>(new Set());   // turn ids already read aloud (result + done both fire)
   // Playback state surfaced to the UI so the user can play/pause/stop the voice.
   // "idle" = nothing queued/playing; "playing" = audio in flight; "paused" = held.
   const [ttsPlayback, setTtsPlayback] = useState<"idle" | "playing" | "paused">("idle");
@@ -250,30 +270,29 @@ export function PersonaWidget() {
     speakSentence(`Hi, I'm ${PERSONA.name}. Voice is working.`);
   }, [speakSentence]);
 
-  const pumpSpeech = useCallback((newText: string) => {
+  // Speak a complete reply's recap ONCE per turn. The full text is chunked on
+  // sentence boundaries so audio still streams (first sentence plays while the
+  // rest synthesizes) — but we only ever feed it the short [[SUMMARY]] summary,
+  // not the working narrative. `result` and `done` both fire, so the per-turn
+  // guard prevents reading it twice.
+  const speakReply = useCallback((turnId: number, summary: string) => {
     if (!speakReplies) return;
-    speakBufRef.current += newText;
-    const parts = speakBufRef.current.split(SENTENCE_END);
-    let tail = speakBufRef.current;
-    if (parts.length >= 3) {
-      tail = parts[parts.length - 1] ?? "";
-      for (let i = 0; i < parts.length - 1; i += 2) {
-        const sentence = (parts[i] ?? "") + (parts[i + 1] ?? "");
+    if (spokenTurnsRef.current.has(turnId)) return;
+    spokenTurnsRef.current.add(turnId);
+    const parts = summary.split(SENTENCE_END);
+    let sentence = "";
+    for (let i = 0; i < parts.length; i++) {
+      sentence += parts[i] ?? "";
+      // Even indices are text, odd indices are the captured terminator.
+      if (i % 2 === 1 || i === parts.length - 1) {
         if (sentence.trim()) speakSentence(sentence);
+        sentence = "";
       }
     }
-    speakBufRef.current = tail;
-  }, [speakReplies, speakSentence]);
-
-  const flushSpeech = useCallback(() => {
-    if (!speakReplies) { speakBufRef.current = ""; return; }
-    const rest = speakBufRef.current.trim();
-    speakBufRef.current = "";
-    if (rest) speakSentence(rest);
   }, [speakReplies, speakSentence]);
 
   const cancelSpeech = useCallback(() => {
-    speakBufRef.current = "";
+    spokenTurnsRef.current.clear();
     speechSessionRef.current += 1;
     audioQueueRef.current.forEach(URL.revokeObjectURL);
     audioQueueRef.current = [];
@@ -432,10 +451,10 @@ export function PersonaWidget() {
 
   // ── Claude SSE streaming — unchanged backend ──
   const applyEvent = useCallback((turnId: number, event: string, data: unknown) => {
-    if (event === "text") {
-      pumpSpeech((data as { text?: string })?.text ?? "");
-    } else if (event === "result" || event === "done") {
-      flushSpeech();
+    // Speech is NO LONGER streamed sentence-by-sentence (that read the whole
+    // working narrative aloud). Instead we speak ONLY the [[SUMMARY]] recap once
+    // the reply is complete — see the speakReply() call below.
+    if (event === "result" || event === "done") {
       setMemoryRefresh((n) => n + 1);
     } else if (event === "error") {
       cancelSpeech();
@@ -443,6 +462,14 @@ export function PersonaWidget() {
 
     setTurns((ts) => ts.map((t) => {
       if (t.id !== turnId) return t;
+      // On completion, read the extracted spoken summary aloud (once). The full
+      // reply is finalized here, so extract the [[SUMMARY]] recap from it.
+      if (event === "result" || event === "done") {
+        const full = (event === "result" ? (t.reply || (data as { text?: string })?.text || "") : t.reply);
+        const spoken = extractSpoken(full);
+        console.debug("[speak] event=%s hasBlock=%s spokenLen=%d fullLen=%d", event, /\[\[\s*SUMMARY\s*\]\]/i.test(full), spoken.length, full.length);
+        if (spoken && !t.errorMessage) speakReply(turnId, spoken);
+      }
       switch (event) {
         case "text": return { ...t, reply: t.reply + ((data as { text?: string })?.text ?? ""), activity: "Writing reply…" };
         case "tool_use": {
@@ -459,7 +486,7 @@ export function PersonaWidget() {
         default: return t;
       }
     }));
-  }, [pumpSpeech, flushSpeech, cancelSpeech]);
+  }, [speakReply, cancelSpeech]);
 
   const sendToClaude = useCallback(async () => {
     const prompt = text.trim();
@@ -835,6 +862,9 @@ export function PersonaWidget() {
 }
 
 function TurnView({ turn }: { turn: Turn }) {
+  // Hide the [[SUMMARY]] recap (meant for the ear) from the on-screen reply. Also
+  // strips a dangling open marker while the block is still streaming in.
+  const visibleReply = stripSpoken(turn.reply).replace(/\[\[\s*SUMMARY[\s\S]*$/i, "").trim();
   return (
     <div className="aria-turn">
       <div className="aria-bubble">{turn.prompt}</div>
@@ -847,10 +877,10 @@ function TurnView({ turn }: { turn: Turn }) {
         </div>
       )}
 
-      {(turn.reply || turn.status === "streaming") && (
+      {(visibleReply || turn.status === "streaming") && (
         <div className="aria-reply">
-          {turn.reply}
-          {turn.status === "streaming" && turn.reply && <span className="aria-caret" />}
+          {visibleReply}
+          {turn.status === "streaming" && visibleReply && <span className="aria-caret" />}
         </div>
       )}
 
