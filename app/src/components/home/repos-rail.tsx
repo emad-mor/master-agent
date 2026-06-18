@@ -8,7 +8,7 @@
 // chat so Daryan does the actual git work (and you can review it first).
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { GitBranch, Loader2, RefreshCw, Pin, PinOff, AlertCircle, Save, Download, Upload, FileText } from "lucide-react";
+import { GitBranch, Loader2, RefreshCw, Pin, PinOff, AlertCircle, GitCommitVertical, ArrowDownToLine, ArrowUpToLine, FileDiff } from "lucide-react";
 import { cx } from "@/lib/format";
 
 type RepoState = {
@@ -138,23 +138,23 @@ function RepoRow({ repo, onPrompt }: { repo: RepoState; onPrompt?: (text: string
       {onPrompt && (
         repo.isGit ? (
           <div className="rrail__ops">
-            <button className="rrail__op" onClick={() => onPrompt(p.save)} title="Stage & commit your changes (writes a message for you)">
-              <Save size={11} /> Save
+            <button className="rrail__op" onClick={() => onPrompt(p.save)} title="git commit — stage all your changes and commit them (a clear message is written for you)">
+              <GitCommitVertical size={11} /> Commit
             </button>
-            <button className="rrail__op" onClick={() => onPrompt(p.update)} title="Pull the latest changes from the remote">
-              <Download size={11} /> Update
+            <button className="rrail__op" onClick={() => onPrompt(p.update)} title="git pull — fetch &amp; merge the latest from the remote">
+              <ArrowDownToLine size={11} /> Pull
             </button>
-            <button className="rrail__op" onClick={() => onPrompt(p.upload)} title="Push your committed changes to GitHub">
-              <Upload size={11} /> Upload
+            <button className="rrail__op" onClick={() => onPrompt(p.upload)} title="git push — upload your commits to the remote (GitHub)">
+              <ArrowUpToLine size={11} /> Push
             </button>
-            <button className="rrail__op" onClick={() => onPrompt(p.changes)} title="Explain what's changed since the last commit">
-              <FileText size={11} /> Changes
+            <button className="rrail__op" onClick={() => onPrompt(p.changes)} title="git diff / status — what's changed since the last commit">
+              <FileDiff size={11} /> Diff
             </button>
           </div>
         ) : (
           <div className="rrail__ops">
-            <button className="rrail__op rrail__op--wide" onClick={() => onPrompt(p.init)} title="Start tracking this folder with git and make a first commit">
-              <GitBranch size={11} /> Start tracking with git
+            <button className="rrail__op rrail__op--wide" onClick={() => onPrompt(p.init)} title="git init — start tracking this folder with git and make the first commit">
+              <GitBranch size={11} /> Init
             </button>
           </div>
         )
