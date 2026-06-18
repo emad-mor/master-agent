@@ -104,6 +104,7 @@ export default function Home() {
   const [text, setText] = useState("");
   const [turns, setTurns] = useState<Turn[]>([]);
   const turnSeqRef = useRef(0);
+  const turnsRef = useRef<Turn[]>([]);               // live mirror of `turns` for callbacks
   const hydratedRef = useRef<string | null>(null);   // which session's history is loaded
   const abortRef = useRef<AbortController | null>(null);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
@@ -221,7 +222,15 @@ export default function Home() {
       if (r.ok) {
         const list: { key: string; label: string }[] = (await r.json()).sessions ?? [];
         setSessions(list);
-        setActiveSession((cur) => (cur && list.some((s) => s.key === cur)) ? cur : (list[0]?.key ?? null));
+        setActiveSession((cur) => {
+          const next = (cur && list.some((s) => s.key === cur)) ? cur : (list[0]?.key ?? null);
+          // First turn of a brand-new session: its just-streamed turns are already
+          // on screen, so adopt the new key as already-hydrated. Without this the
+          // hydrate effect would reload from disk mid-playback — flashing a skeleton
+          // and remounting (restarting) the reply being read aloud.
+          if (next && next !== cur && turnsRef.current.length > 0) hydratedRef.current = next;
+          return next;
+        });
       }
     } catch {}
     finally { setSessionsLoaded(true); }
@@ -599,6 +608,7 @@ export default function Home() {
     const el = transcriptRef.current;
     if (el && stickToBottomRef.current) el.scrollTop = el.scrollHeight;
   }, [turns]);
+  useEffect(() => { turnsRef.current = turns; }, [turns]);
 
   // ── Elapsed timer for active turn ──
   const hasActiveTurn = turns.some((t) => t.status === "streaming");
@@ -630,6 +640,7 @@ export default function Home() {
   const onProjectChange = useCallback((slug: string) => {
     setProject(slug);
     setTurns([]);
+    turnsRef.current = [];          // sync: don't let the old project's turns be adopted into the new project's session
     void loadBriefing();
   }, [loadBriefing]);
 
