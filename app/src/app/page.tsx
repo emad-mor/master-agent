@@ -28,6 +28,30 @@ const SELF_KEY = "__self__";              // Daryan's own source code (repo root
 const MIN_RECORDING_MS = 350;
 const WAVE_BARS = 48;
 
+/** Read an SSE stream, invoking onEvent(event, data) per message. Used for both
+ *  a new send and reattaching to an in-progress run after a refresh. */
+async function pumpSSE(body: ReadableStream<Uint8Array>, onEvent: (event: string, data: unknown) => void) {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  let currentEvent = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let nl: number;
+    while ((nl = buf.indexOf("\n")) !== -1) {
+      const line = buf.slice(0, nl);
+      buf = buf.slice(nl + 1);
+      if (line.startsWith("event: ")) { currentEvent = line.slice(7).trim(); continue; }
+      if (!line.startsWith("data: ")) continue;
+      let parsed: unknown;
+      try { parsed = JSON.parse(line.slice(6)); } catch { continue; }
+      onEvent(currentEvent, parsed);
+    }
+  }
+}
+
 type Project = { slug: string; name: string; path: string };
 
 type TaskInfo = {
@@ -105,6 +129,8 @@ export default function Home() {
   const [turns, setTurns] = useState<Turn[]>([]);
   const turnSeqRef = useRef(0);
   const turnsRef = useRef<Turn[]>([]);               // live mirror of `turns` for callbacks
+  const runSessionKeyRef = useRef<string | null>(null);   // server session key of the active run (for Stop / reattach)
+  const applyEventRef = useRef<((id: number, event: string, data: unknown) => void) | null>(null);
   const hydratedRef = useRef<string | null>(null);   // which session's history is loaded
   const abortRef = useRef<AbortController | null>(null);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
@@ -305,13 +331,44 @@ export default function Home() {
     } catch { setTurns([]); }
   }, [project]);
 
+  // Reattach to a server-owned run that's still streaming for this session (e.g.
+  // after a tab refresh). The server replays the run's log from the start, so we
+  // rebuild the in-progress turn from scratch and then tail it live. No active
+  // run → the stream sends `idle` and we do nothing. Long-lived: not awaited by
+  // anything that gates the UI.
+  const reattachActiveRun = useCallback(async (sessionKey: string) => {
+    if (turnsRef.current.some((t) => t.status === "streaming")) return;   // already live in this tab
+    try {
+      abortRef.current?.abort();
+      const ctrl = new AbortController();
+      abortRef.current = ctrl;
+      const r = await fetch(`/api/persona/run?project=${encodeURIComponent(project)}&sessionKey=${encodeURIComponent(sessionKey)}`, { signal: ctrl.signal, cache: "no-store" });
+      if (!r.ok || !r.body) return;
+      runSessionKeyRef.current = sessionKey;
+      let id: number | null = null;
+      await pumpSSE(r.body, (event, data) => {
+        if (event === "idle") return;                 // nothing in flight for this session
+        if (event === "begin") {
+          if (id != null) return;
+          id = ++turnSeqRef.current;
+          const d = data as { prompt?: string; startedAt?: number };
+          stickToBottomRef.current = true;
+          setTurns((ts) => [...ts, { id: id!, prompt: d.prompt ?? "(in progress)", reply: "", toolUses: [], status: "streaming", startedAt: d.startedAt ?? Date.now(), activity: "Resuming…" }]);
+          return;
+        }
+        if (id == null) return;                        // shouldn't happen — begin is always first
+        applyEventRef.current?.(id, event, data);
+      });
+    } catch { /* aborted, or no run to resume */ }
+  }, [project]);
+
   const switchSession = useCallback((key: string) => {
     if (key === activeSession) return;
     setActiveSession(key);
     hydratedRef.current = key;       // we load it here; don't let the mount effect double-load
     setHydrating(true);              // skeleton instead of the old tab's turns
-    void loadSessionHistory(key).finally(() => setHydrating(false));
-  }, [activeSession, loadSessionHistory]);
+    void loadSessionHistory(key).finally(() => setHydrating(false)).then(() => reattachActiveRun(key));
+  }, [activeSession, loadSessionHistory, reattachActiveRun]);
 
   const closeSession = useCallback(async (key: string) => {
     await fetch(`/api/persona/sessions?project=${encodeURIComponent(project)}&key=${key}`, { method: "DELETE" });
@@ -377,8 +434,11 @@ export default function Home() {
     if (turns.some((t) => t.status === "streaming")) return;
     hydratedRef.current = activeSession;
     setHydrating(true);
-    void loadSessionHistory(activeSession).finally(() => setHydrating(false));
-  }, [activeSession, loadSessionHistory, turns]);
+    const s = activeSession;
+    // Show history first (gates `hydrating`), THEN reattach any in-progress run
+    // (long-lived; must not keep the skeleton up).
+    void loadSessionHistory(s).finally(() => setHydrating(false)).then(() => reattachActiveRun(s));
+  }, [activeSession, loadSessionHistory, turns, reattachActiveRun]);
   useEffect(() => { try { localStorage.setItem(STORAGE_KEY, text); } catch {} }, [text]);
   useEffect(() => { try { localStorage.setItem(PROJECT_KEY, project); } catch {} }, [project]);
 
@@ -522,6 +582,9 @@ export default function Home() {
       }
     }));
   }, [speakReplies]);
+  // Keep a ref to applyEvent so reattachActiveRun (declared earlier) can use the
+  // latest version without depending on its identity.
+  useEffect(() => { applyEventRef.current = applyEvent; }, [applyEvent]);
 
   const sendToClaude = useCallback(async () => {
     const prompt = text.trim();
@@ -536,6 +599,7 @@ export default function Home() {
     setAttachments([]);
     stopAllReaders();                          // stop any reply still being read aloud
     setAutoPlayTurnId(null);                   // the next finished reply gets tagged for auto-play
+    runSessionKeyRef.current = activeSession;  // best-known session for Stop until the server confirms it
 
     abortRef.current?.abort();
     const ctrl = new AbortController();
@@ -560,26 +624,15 @@ export default function Home() {
       return;
     }
 
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buf = "";
-    let currentEvent = "";
     try {
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        let nl: number;
-        while ((nl = buf.indexOf("\n")) !== -1) {
-          const line = buf.slice(0, nl);
-          buf = buf.slice(nl + 1);
-          if (line.startsWith("event: ")) { currentEvent = line.slice(7).trim(); continue; }
-          if (!line.startsWith("data: ")) continue;
-          let parsed: unknown;
-          try { parsed = JSON.parse(line.slice(6)); } catch { continue; }
-          applyEvent(id, currentEvent, parsed);
-        }
-      }
+      // `begin`/`continuity` are server bookkeeping for the reattach path; the
+      // sender already has its turn, so applyEvent ignores them (default no-op).
+      // We do capture the server's resolved session key from `continuity` so Stop
+      // can target the run (esp. on a first turn, when activeSession is still null).
+      await pumpSSE(res.body, (event, data) => {
+        if (event === "continuity") { const sk = (data as { sessionKey?: string })?.sessionKey; if (sk) runSessionKeyRef.current = sk; }
+        applyEvent(id, event, data);
+      });
     } catch (err) {
       if ((err as DOMException)?.name !== "AbortError") {
         setTurns((ts) => ts.map((t) => t.id === id ? { ...t, status: "error", errorMessage: (err as Error).message } : t));
@@ -592,8 +645,12 @@ export default function Home() {
 
   const stopTurn = useCallback(() => {
     abortRef.current?.abort();
+    // The run is server-owned now — aborting the fetch only disconnects. Tell the
+    // server to actually kill it (its partial reply is still saved).
+    const sk = runSessionKeyRef.current ?? activeSession;
+    if (sk) void fetch(`/api/persona/run?project=${encodeURIComponent(project)}&sessionKey=${encodeURIComponent(sk)}`, { method: "DELETE" });
     setTurns((ts) => ts.map((t) => t.status === "streaming" ? { ...t, status: "done" } : t));
-  }, []);
+  }, [project, activeSession]);
 
   // ── Scroll transcript ──
   // Only auto-follow the stream when the user is already at/near the bottom. If
