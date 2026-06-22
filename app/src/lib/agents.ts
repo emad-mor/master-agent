@@ -183,13 +183,13 @@ export async function deleteAgent(id: string): Promise<void> {
 // Turn a free-text goal + the available agents into a structured step list the
 // orchestrator can run. Uses a cheap Haiku spawn; falls back to a single step.
 
-const PLANNER_MODEL = process.env.ARIA_MEMORY_MODEL || "claude-haiku-4-5-20251001";
+const PLANNER_MODEL = process.env.ARIA_PLANNER_MODEL || "claude-opus-4-8";
 
 export type PlannedStep = { key: string; agentId?: string; agentName?: string; prompt: string; dependsOn: string[] };
 
 export async function planFlow(goal: string, agents: Agent[]): Promise<PlannedStep[]> {
   const roster = agents.map((a) => `- id=${a.id} name="${a.name}": ${a.instructions.slice(0, 120)}`).join("\n");
-  const prompt = `You are a planner that decomposes a goal into a small multi-agent task flow (a DAG). Available agents:\n${roster}\n\nGoal: ${goal}\n\nReturn ONLY a JSON array of steps, no prose. Each step: {"key":"1","agentId":"<one of the ids above, or null>","prompt":"<instruction for that step>","dependsOn":["<keys this step needs first>"]}. Keep it to 2-5 steps. Make independent steps have no shared dependency so they can run in parallel. Wire dependent steps with dependsOn.
+  const prompt = `You are a planner that decomposes a goal into a multi-agent task flow (a DAG). Available agents:\n${roster}\n\nGoal: ${goal}\n\nReturn ONLY a JSON array of steps, no prose. Each step: {"key":"1","agentId":"<one of the ids above, or null>","prompt":"<instruction for that step>","dependsOn":["<keys this step needs first>"]}. Use as many steps as the goal requires (up to 30). If the goal explicitly names agents, stages, or a chain, honour that structure exactly — do not collapse or summarise it. Make independent steps have no shared dependency so they can run in parallel. Wire dependent steps with dependsOn.
 
 WRITING STEP PROMPTS — this is critical:
 - Each step runs HEADLESS with no human present. The prompt must be a COMPLETE, self-contained instruction that produces a deliverable. Never write a prompt that would make the agent ask the user a question or seek clarification.
@@ -214,7 +214,7 @@ WRITING STEP PROMPTS — this is critical:
   }
 }
 
-function spawnHaiku(prompt: string, timeoutMs = 30_000): Promise<string> {
+function spawnHaiku(prompt: string, timeoutMs = 120_000): Promise<string> {
   const bin = process.platform === "win32" ? "claude.cmd" : "claude";
   return new Promise((resolve, reject) => {
     const child = spawn(bin, [
